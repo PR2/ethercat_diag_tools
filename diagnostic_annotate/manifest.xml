@@ -1,0 +1,16 @@
+<package>
+  <description brief="diagnostic_annotate">
+
+     diagnostic_annotate
+
+  </description>
+  <author>Derek King</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/diagnostic_annotate</url>
+  <depend package="rospy"/>
+  <depend package="diagnostic_msgs"/>
+
+</package>
+
+
