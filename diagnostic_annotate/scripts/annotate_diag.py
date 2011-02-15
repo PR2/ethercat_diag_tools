@@ -65,6 +65,7 @@ import getopt
 import itertools
 import yaml
 import os.path
+import traceback
 
 from diagnostic_annotate.diag_event import DiagEvent, no_event
 from diagnostic_annotate.event_delay import EventDelay
@@ -217,7 +218,7 @@ def main(argv):
             print "Keyboard Interrupt, quiting"
             break
         except Exception,e:
-            #print traceback.print_exc()
+            print traceback.print_exc()
             print "Error annotating bag %s : %s" % (inbag_filename, str(e))
 
     # Use 30 second reordering buffer.

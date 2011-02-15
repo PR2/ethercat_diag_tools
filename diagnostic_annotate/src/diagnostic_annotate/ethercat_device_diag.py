@@ -115,22 +115,61 @@ def decode_safety_disable(value):
     """ Return safety disable status object """
     return SafetyDisableStatus(value)
 
+    
 
-class EtherCATDeviceDiag:
-    """ Looks for errors in a specific EtherCAT Device """
-    def __init__(self, diag_map, name, num_ports, has_encoder):
+class EtherCATDeviceDiag(object):
+    """ Looks for errors in a generic EtherCAT Devices """
+    def __init__(self, diag_map, name, num_ports):
         self.name = name
         diag_map[self.name] = self
         self.num_ports = num_ports
-        self.has_encoder = has_encoder
 
-        kvl = KeyValueConvertList()
-        kvl.add('Safety Disable Status Hold', ConvertVar('safety_disable_status_hold', decode_safety_disable, SafetyDisableStatus("ENABLED (00)")))
-        kvl.add('Num encoder_errors', ConvertVar('encoder_errors', int, 0))
+        self.kvl = KeyValueConvertList()
+        kvl = self.kvl
         for i in range(4):
             kvl.add('RX Error Port %d'%i, ConvertList('rx_error', int, i, 0))
             kvl.add('Lost Link Port %d'%i, ConvertList('lost_link', int, i, 0))
-        self.kvl = kvl
+        
+        self.old = VarStorage()
+        kvl.set_defaults(self.old)
+        
+    def process(self, msg, t):        
+        new = VarStorage()
+        self.kvl.convert(msg, new)
+        event_list = self.processKVL(new, t)
+        self.old = new
+        return event_list
+    
+    def processKVL(self, new, t):
+        event_list = []
+        old = self.old
+        name = self.name
+        num_ports = len(new.rx_error)
+        if num_ports != self.num_ports:
+            event_list.append(generic_event(name, t, "changing number of ports from %d to %d" % (self.num_ports, num_ports)))
+            self.num_ports = num_ports
+
+        for port in range(self.num_ports):
+            if new.rx_error[port] != old.rx_error[port]:
+                event = rx_error_event(name,t, port, (new.rx_error[port] - old.rx_error[port]))
+                event_list.append(event)
+            if new.lost_link[port] != old.lost_link[port]:
+                event = lost_link_event(name,t,port,(new.lost_link[port] - old.lost_link[port]))  
+                event_list.append(event)
+
+        return event_list
+
+
+
+class WGEtherCATDeviceDiag(EtherCATDeviceDiag):
+    """Looks for error in WG005/WG006/WG021 devices"""
+    def __init__(self, diag_map, name, num_ports, has_encoder):
+        EtherCATDeviceDiag.__init__(self, diag_map, name, num_ports)
+        self.has_encoder = has_encoder
+        
+        kvl = self.kvl
+        kvl.add('Safety Disable Status Hold', ConvertVar('safety_disable_status_hold', decode_safety_disable, SafetyDisableStatus("ENABLED (00)")))
+        kvl.add('Num encoder_errors', ConvertVar('encoder_errors', int, 0))
 
         self.motor_model_error_re   = re.compile("Problem with the MCB, motor, encoder, or actuator model", re.IGNORECASE)
         self.motor_model_warning_re = re.compile("Potential problem with the MCB, motor, encoder, or actuator model",  re.IGNORECASE)
@@ -140,16 +179,17 @@ class EtherCATDeviceDiag:
         self.old = VarStorage()
         kvl.set_defaults(self.old)
 
-        
-    def process(self, msg, t):        
-        event_list = []
 
+    def process(self, msg, t):
         name = self.name
         old = self.old
         new = VarStorage()
         self.kvl.convert(msg, new)
 
-        # Look for motor model warning or motor model errors
+        # Have parent class process KVL list to find errors common to all EtherCAT devices
+        event_list = []
+        event_list += EtherCATDeviceDiag.processKVL(self, new, t)        
+        
         if msg.level == 2:
             has_motor_model_error = bool(self.motor_model_error_re.search(msg.message))
             if not self.has_motor_model_error and has_motor_model_error:
@@ -174,23 +214,10 @@ class EtherCATDeviceDiag:
                 event_list.append(undervoltage_lockout_event(name, t, "undervoltage lockout"))
             else:
                 event_list.append(generic_event(name, t, "safety disable status changed to %s" % (new.safety_disable_status_hold.to_str())))
-            
-        num_ports = len(new.rx_error)
-        if num_ports != self.num_ports:
-            event_list.append(generic_event(name, t, "changing number of ports from %d to %d" % (self.num_ports, num_ports)))
-            self.num_ports = num_ports
-
-        for port in range(self.num_ports):
-            if new.rx_error[port] != old.rx_error[port]:
-                event = rx_error_event(name,t, port, (new.rx_error[port] - old.rx_error[port]))
-                event_list.append(event)
-            if new.lost_link[port] != old.lost_link[port]:
-                event = lost_link_event(name,t,port,(new.lost_link[port] - old.lost_link[port]))
-                event_list.append(event)
 
         self.old = new
-
         return event_list
+
 
 
 class EtherCATDeviceAddDiag:
@@ -214,21 +241,22 @@ class EtherCATDeviceAddDiag:
         #print "Found EtherCAT Device %s" % name
 
         # Use the HW id to figure number of ports and whether device has encoder
-        num_ports = 1
-        has_encoder = False
         if (re.match("68-05005-[0-9]{5}$", msg.hardware_id)):
             num_ports = 2
             has_encoder = True
+            dev = WGEtherCATDeviceDiag(self.diag_map, name, num_ports, has_encoder)
         elif (re.match("68-05006-[0-9]{5}$", msg.hardware_id)):
             num_ports = 1
             has_encoder = True
-        elif (re.match("68-05014-[0-9]{5}$", msg.hardware_id)):
-            num_ports = 4
+            dev = WGEtherCATDeviceDiag(self.diag_map, name, num_ports, has_encoder)
         elif (re.match("68-05021-[0-9]{5}$", msg.hardware_id)):
             num_ports = 2
+            has_encoder = False
+            dev = WGEtherCATDeviceDiag(self.diag_map, name, num_ports, has_encoder)
+        elif (re.match("68-05014-[0-9]{5}$", msg.hardware_id)):
+            num_ports = 4
+            dev = EtherCATDeviceDiag(self.diag_map, name, num_ports)
         else:
             print "Don't understand hardware_id = ", msg.hardware_id
-
-        dev = EtherCATDeviceDiag(self.diag_map, name, num_ports, has_encoder)
 
         return dev.process(msg,t)

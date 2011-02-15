@@ -100,7 +100,7 @@ class EtherCATMasterDiag:
             event_list.append(dropped_packet_event(self.name, t, (new.dropped_packets - old.dropped_packets)))
 
         if new.late_packets != old.late_packets:                                 
-            event_list.append(generic_event(self.name, t, (new.late_packets - old.late_packets)))
+            event_list.append(late_packet_event(self.name, t, (new.late_packets - old.late_packets)))
 
         self.level = msg.level
         self.message = msg.message
