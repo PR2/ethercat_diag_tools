@@ -92,7 +92,7 @@ def usage(progname):
 
 # EtherCAT Device Grid
 #                     
-#  Device    EPU  PDI,  Port,    RX,  FwdD RX,  Lost Links
+#  Device    Port,  Valid,  Lost Links, RX, FwdD RX,  EPU  PDI,  
 #                
 #  fl_caster 0    0     Port0     0    0        0
 #                       Port1     0    0        0 
@@ -199,15 +199,18 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
 
         # Device grid
         device_grid = wx.grid.Grid(self) 
-        device_grid.CreateGrid(0,8)
+        device_grid.CreateGrid(0,10)
         device_grid.SetColLabelValue(0, "Device")
         device_grid.SetColLabelValue(1, "Position")
-        device_grid.SetColLabelValue(2, "EPU")
-        device_grid.SetColLabelValue(3, "PDI")
-        device_grid.SetColLabelValue(4, "Port")
+        device_grid.SetColLabelValue(2, "Valid")
+        device_grid.SetColLabelValue(3, "Port")
+        device_grid.SetColLabelValue(4, "LostLink")
         device_grid.SetColLabelValue(5, "Rx")
-        device_grid.SetColLabelValue(6, "FwdRx")
-        device_grid.SetColLabelValue(7, "LostLink")
+        device_grid.SetColLabelValue(6, "Empty")
+        device_grid.SetColLabelValue(7, "FwdRx")
+        device_grid.SetColLabelValue(8, "EPU")
+        device_grid.SetColLabelValue(9, "PDI")
+
         device_grid.SetRowLabelSize(0) # hide the row labels
         device_grid.AutoSize()
         self.device_grid = device_grid
@@ -277,6 +280,14 @@ class MainWindow(wx.Frame):
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
         self.display_combo.SetSelection(0)  # set selection to absolute on startup
 
+        # Name of diagnostics topic
+        self.topic_text = wx.TextCtrl(self, -1, "", style = wx.TE_READONLY)
+
+        # topic button
+        self.topic_button = wx.Button(self, -1, "Select Topic")
+        self.Bind(wx.EVT_BUTTON, self.OnChangeTopic, self.topic_button)
+
+
         # Scroll window with device information arranged in grid
         self.device_panel = DevicePanel(self)
 
@@ -294,6 +305,8 @@ class MainWindow(wx.Frame):
         vsizer0 = wx.BoxSizer(wx.VERTICAL)
         vsizer0.Add(self.zero_button, 0)
         vsizer0.Add(self.display_combo, 0)
+        vsizer0.Add(self.topic_text,0,wx.EXPAND)
+        vsizer0.Add(self.topic_button, 0)
 
 
         # device panel
@@ -349,6 +362,7 @@ class MainWindow(wx.Frame):
     def changeTopic(self, topic_name):
         self.history.subscribeToDiagnostics(topic_name)
         self.current_topic = topic_name
+        self.topic_text.SetValue(self.current_topic)
         self.tsd_new = None
         self.tsd_old = None
         self.update()
@@ -360,7 +374,8 @@ class MainWindow(wx.Frame):
         for col,cell_data in enumerate(data):
             grid.SetCellValue(row,col,str(cell_data))
             bg_color = levelToBackgroundColor(cell_data.level)
-            grid.SetCellBackgroundColour(row,col,bg_color)        
+            grid.SetCellBackgroundColour(row,col,bg_color)
+            grid.SetReadOnly( 0, col );
         grid.AutoSize()
 
 

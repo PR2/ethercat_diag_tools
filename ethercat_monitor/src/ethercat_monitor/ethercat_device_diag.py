@@ -48,6 +48,11 @@ from ethercat_monitor.ethercat_device_status import EtherCATDeviceStatus, EtherC
 
 import re
 
+_true_re = re.compile("(true)|(yes)", re.IGNORECASE)
+def _strToBool(strval):
+    """Returns true if string is "true", "True", "yes", "Yes", or "y" """
+    return bool(_true_re.search(strval))
+
 
 class EtherCATDeviceDiag:
     """ Looks for network errors in a specific EtherCAT Device """
@@ -65,6 +70,7 @@ class EtherCATDeviceDiag:
         kvl.add('PDI Errors', ConvertVar('pdi_errors', int, 0))
         kvl.add('EPU Errors', ConvertVar('epu_errors', int, 0))
         kvl.add('Position', ConvertVar('ring_position', int, None))
+        kvl.add('Valid', ConvertVar('valid', _strToBool, None))
         for i in range(4):
             kvl.add('RX Error Port %d'%i, ConvertList('rx_errors', int, i, 0))
             kvl.add('Forwarded RX Error Port %d'%i, ConvertList('forwarded_rx_errors', int, i, 0))
@@ -90,6 +96,7 @@ class EtherCATDeviceDiag:
         device_status.epu_errors = new.epu_errors
         device_status.pdi_errors = new.pdi_errors
         device_status.ring_position = self.ring_position
+        device_status.valid = new.valid
         for port_num in range(self.num_ports):            
             port = device_status.ports[port_num]
             port.rx_errors = new.rx_errors[port_num]

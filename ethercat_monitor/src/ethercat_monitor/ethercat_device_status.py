@@ -57,13 +57,15 @@ class EtherCATDevicePortStatus:
 
     def getDataGrid(self,port_num):
         empty = cell_data_empty #CellData()
-        data = [empty,empty,empty,empty, CellData('Port%d'%port_num)]
+        data = [empty,empty,empty,CellData('Port%d'%port_num)]
         ERROR = CellData.ERROR        
         WARN = CellData.WARN
         DATA = CellData.DATA
-        data.append(CellData(self.rx_errors, ERROR if (self.rx_errors != 0) else DATA))
-        data.append(CellData(self.forwarded_rx_errors, WARN if (self.forwarded_rx_errors != 0) else DATA))
         data.append(CellData(self.lost_links, ERROR if (self.lost_links != 0) else DATA))
+        data.append(CellData(self.rx_errors, ERROR if (self.rx_errors != 0) else DATA))
+        data.append(empty)
+        data.append(CellData(self.forwarded_rx_errors, WARN if (self.forwarded_rx_errors != 0) else DATA))
+        data+=[empty,empty]
         return data
 
     def getDiff(self, port_old):
@@ -90,6 +92,7 @@ class EtherCATDeviceStatus:
         self.ring_position = None
         self.epu_errors = 0
         self.pdi_errors = 0
+        self.valid = False
 
     def __str__(self):
         result  = "  EPU errors : %d\n" % self.epu_errors
@@ -102,12 +105,14 @@ class EtherCATDeviceStatus:
         data = []
         for num,port in enumerate(self.ports):
             data.append(port.getDataGrid(num))
-        data[0][0] = CellData(name)
+
         ERROR = CellData.ERROR
         DATA = CellData.DATA
+        data[0][0] = CellData(name, DATA if (self.valid) else ERROR)
         data[0][1] = CellData(self.ring_position, ERROR if (self.ring_position is None) else DATA)
-        data[0][2] = CellData(self.epu_errors, ERROR if (self.epu_errors != 0) else DATA)
-        data[0][3] = CellData(self.pdi_errors, ERROR if (self.pdi_errors != 0) else DATA)
+        data[0][2] = CellData(self.valid, DATA if (self.valid) else ERROR)
+        data[0][8] = CellData(self.epu_errors, ERROR if (self.epu_errors != 0) else DATA)
+        data[0][9] = CellData(self.pdi_errors, ERROR if (self.pdi_errors != 0) else DATA)
         return data
 
     def getDiff(self,device_status_old):        
@@ -116,6 +121,7 @@ class EtherCATDeviceStatus:
         ds_diff = EtherCATDeviceStatus(0)
         ds_diff.epu_errors = self.epu_errors - ds_old.epu_errors
         ds_diff.pdi_errors = self.pdi_errors - ds_old.pdi_errors
+        ds_diff.valid = self.valid and ds_old.valid
         for num in range(num_ports):
             if (num >= len(self.ports)) or (num >= len(ds_old.ports)):
                 ds_diff.ports.append(EtherCATDevicePortMissing())
