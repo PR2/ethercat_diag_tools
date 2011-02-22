@@ -93,6 +93,7 @@ class EtherCATDeviceDiag:
             self.ring_position = new.ring_position
 
         device_status = EtherCATDeviceStatus(self.num_ports)
+        device_status.hardware_id = msg.hardware_id
         device_status.epu_errors = new.epu_errors
         device_status.pdi_errors = new.pdi_errors
         device_status.ring_position = self.ring_position

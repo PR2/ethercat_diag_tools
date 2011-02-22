@@ -63,11 +63,11 @@ import os.path
 
 import wx
 import wx.grid
-import wx.lib.scrolledpanel
 
 
 from ethercat_monitor.ethercat_history import EtherCATHistory
-
+from ethercat_monitor.wx_util import levelToBackgroundColor
+from ethercat_monitor.device_panel import DevicePanel
 
 from ethercat_monitor.cell_data import CellData
 
@@ -101,7 +101,6 @@ def usage(progname):
 #  Sent Dropped  Late 
 
 
-
 class TimestampSelect(wx.Panel):
     def __init__(self,parent,name):
         wxPanel.__init__(parent,name=name)
@@ -124,18 +123,6 @@ class TimestampSelect(wx.Panel):
     def update(self,time):
         self.raw_raw_text_box.SetValue(str(time))
         self.raw_pretty_text_box.SetValue(str(time))
-
-
-def levelToBackgroundColor(level):
-    if level is CellData.ERROR:
-        bg_color = wx.RED
-    elif level is CellData.WARN:
-        bg_color = wx.Colour(255,165,0)
-    elif level is CellData.GOOD:
-        bg_color = wx.GREEN
-    else:
-        bg_color = wx.WHITE
-    return bg_color    
 
 
 def getDiagnosticTopics():
@@ -192,55 +179,6 @@ class TopicSelectDialog(wx.Dialog):
         self.selected_topic = self.combo.GetValue()
         self.Close()
 
-
-class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
-    def __init__(self, parent):
-        wx.lib.scrolledpanel.ScrolledPanel.__init__(self,parent,-1)
-
-        # Device grid
-        device_grid = wx.grid.Grid(self) 
-        device_grid.CreateGrid(0,10)
-        device_grid.SetColLabelValue(0, "Device")
-        device_grid.SetColLabelValue(1, "Position")
-        device_grid.SetColLabelValue(2, "Valid")
-        device_grid.SetColLabelValue(3, "Port")
-        device_grid.SetColLabelValue(4, "LostLink")
-        device_grid.SetColLabelValue(5, "Rx")
-        device_grid.SetColLabelValue(6, "Empty")
-        device_grid.SetColLabelValue(7, "FwdRx")
-        device_grid.SetColLabelValue(8, "EPU")
-        device_grid.SetColLabelValue(9, "PDI")
-
-        device_grid.SetRowLabelSize(0) # hide the row labels
-        device_grid.AutoSize()
-        self.device_grid = device_grid
-
-        vsizer = wx.BoxSizer(wx.VERTICAL)
-        vsizer.Add(self.device_grid, wx.EXPAND)
-
-        self.SetSizer(vsizer)
-        self.SetAutoLayout(1)
-        self.SetupScrolling()
-
-
-    def updateDeviceGrid(self, tsd):
-        grid = self.device_grid
-        data = tsd.getDeviceGrid()
-
-        diff = len(data) - grid.GetNumberRows()
-        if diff > 0:
-            grid.AppendRows(diff)
-        elif diff < 0:
-            grid.DeleteRows(0,diff)
-        
-        for row,row_data in enumerate(data):
-            for col,cell_data in enumerate(row_data):
-                grid.SetCellValue(row,col,str(cell_data))
-                bg_color = levelToBackgroundColor(cell_data.level)
-                grid.SetCellBackgroundColour(row,col,bg_color)
-                grid.SetReadOnly( row, col );
-
-        grid.AutoSize()
 
 
 
@@ -321,7 +259,7 @@ class MainWindow(wx.Frame):
 
         self.SetSizer(hsizer)
         self.SetAutoLayout(1)
-        hsizer.SetMinSize((800,600))
+        hsizer.SetMinSize((1000,600))
         hsizer.Fit(self)
 
 

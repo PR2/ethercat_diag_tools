@@ -55,19 +55,6 @@ class EtherCATDevicePortStatus:
         result += "   Lost Links    : %d\n" % self.lost_links
         return result
 
-    def getDataGrid(self,port_num):
-        empty = cell_data_empty #CellData()
-        data = [empty,empty,empty,CellData('Port%d'%port_num)]
-        ERROR = CellData.ERROR        
-        WARN = CellData.WARN
-        DATA = CellData.DATA
-        data.append(CellData(self.lost_links, ERROR if (self.lost_links != 0) else DATA))
-        data.append(CellData(self.rx_errors, ERROR if (self.rx_errors != 0) else DATA))
-        data.append(empty)
-        data.append(CellData(self.forwarded_rx_errors, WARN if (self.forwarded_rx_errors != 0) else DATA))
-        data+=[empty,empty]
-        return data
-
     def getDiff(self, port_old):
         """ Returns difference in error counters between this and old values"""
         port_diff = EtherCATDevicePortStatus()
@@ -101,20 +88,6 @@ class EtherCATDeviceStatus:
             result += "  Port " + str(port_num) + " : \n" + str(port)
         return result
 
-    def getDataGrid(self,name):
-        data = []
-        for num,port in enumerate(self.ports):
-            data.append(port.getDataGrid(num))
-
-        ERROR = CellData.ERROR
-        DATA = CellData.DATA
-        data[0][0] = CellData(name, DATA if (self.valid) else ERROR)
-        data[0][1] = CellData(self.ring_position, ERROR if (self.ring_position is None) else DATA)
-        data[0][2] = CellData(self.valid, DATA if (self.valid) else ERROR)
-        data[0][8] = CellData(self.epu_errors, ERROR if (self.epu_errors != 0) else DATA)
-        data[0][9] = CellData(self.pdi_errors, ERROR if (self.pdi_errors != 0) else DATA)
-        return data
-
     def getDiff(self,device_status_old):        
         ds_old = device_status_old
         num_ports = max(len(self.ports), len(ds_old.ports))
@@ -122,6 +95,10 @@ class EtherCATDeviceStatus:
         ds_diff.epu_errors = self.epu_errors - ds_old.epu_errors
         ds_diff.pdi_errors = self.pdi_errors - ds_old.pdi_errors
         ds_diff.valid = self.valid and ds_old.valid
+        if self.hardware_id == ds_old.hardware_id:
+            ds_diff.hardware_id = self.hardware_id
+        else:
+            ds_diff.hardware_id = "Mismatch %s != %s" % (self.hardware_id, ds_old.hardware_id)
         for num in range(num_ports):
             if (num >= len(self.ports)) or (num >= len(ds_old.ports)):
                 ds_diff.ports.append(EtherCATDevicePortMissing())

@@ -84,21 +84,9 @@ class EtherCATHistoryTimestepData:
             result += " " + name + " : \n" + str(device)
         result += '--\n'
         return result
-
-    def getDeviceGrid(self):
-        #first make list of tuples (position, name, device) from devices
-        ordered_devices = []
-        for name,device in self.devices.iteritems():
-            ordered_devices.append( (device.ring_position, name, device) )
-        ordered_devices.sort()
-        data = []
-        for position,name,device in ordered_devices:
-            data += device.getDataGrid(name)
-        return data
-
+    
     def getMasterGrid(self):
         return self.master.getDataGrid()
-
 
     def getDiff(self, timestamp_data_old):
         """ returns new EthercatHistoryTimestampData that represents difference
