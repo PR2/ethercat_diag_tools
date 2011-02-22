@@ -70,7 +70,7 @@ from ethercat_monitor.ethercat_history import EtherCATHistory
 from ethercat_monitor.wx_util import levelToBackgroundColor
 from ethercat_monitor.device_panel import DevicePanel
 
-from ethercat_monitor.cell_data import CellData
+from ethercat_monitor.cell_data import CellData, cell_data_empty
 
 def usage(progname):
     print __doc__ % vars()    
@@ -261,10 +261,12 @@ class MainWindow(wx.Frame):
 
         # Master grid
         master_grid = wx.grid.Grid(self)
-        master_grid.CreateGrid(1,3)
+        master_grid.CreateGrid(1,5)
         master_grid.SetColLabelValue(0, "Sent")
-        master_grid.SetColLabelValue(1, "Dropped")
+        master_grid.SetColLabelValue(1, "Drops")
         master_grid.SetColLabelValue(2, "Late")
+        master_grid.SetColLabelValue(3, "Drops per Million Sends")
+        master_grid.SetColLabelValue(4, "Drops per Hour")
         master_grid.SetRowLabelSize(0) # hide the row labels
         master_grid.AutoSize() 
         self.master_grid = master_grid
@@ -348,8 +350,34 @@ class MainWindow(wx.Frame):
         self.update()
 
     def updateMasterGrid(self, tsd):
+        ERROR = CellData.ERROR
+        WARN = CellData.WARN
+        DATA = CellData.DATA
+        empty = cell_data_empty #CellData()
+        master = tsd.master
+        data = [empty for i in range(5)]
+        sent = master.sent
+        dropped = master.dropped
+        late = master.late
+
+        data[0] = CellData(sent)
+        data[1] = CellData(dropped, ERROR if (dropped > 0) else DATA)
+        data[2] = CellData(late   , WARN  if (late    > 0) else DATA)
+        if sent != 0:
+            drops_per_million_sends = 1e6 * float(dropped) / float(sent)
+            if drops_per_million_sends > 3 : level = ERROR
+            elif drops_per_million_sends > 1: level = WARN
+            else: level = DATA
+            data[3] = CellData("%.3f"%drops_per_million_sends, level)
+            if tsd.timestamp_old is not None:
+                secs_per_hour = 3600.
+                hours = (tsd.timestamp - tsd.timestamp_old).to_sec() / secs_per_hour
+                drops_per_hour = dropped / hours
+                if (drops_per_hour > 10): level = ERROR
+                elif (drops_per_hour > 1): level = WARN
+                else : level = DATA
+                data[4] = CellData("%.2f"%drops_per_hour, level)
         grid = self.master_grid
-        data = tsd.getMasterGrid()
         row = 0
         for col,cell_data in enumerate(data):
             grid.SetCellValue(row,col,str(cell_data))
