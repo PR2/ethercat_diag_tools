@@ -54,6 +54,7 @@ roslib.load_manifest(PKG)
 
 import rospy
 import time
+import math
 import sys 
 import os
 import unittest
@@ -140,6 +141,36 @@ def getDiagnosticTopics():
     return diag_topics
 
 
+def prettyTimestamp(timestamp):
+    """ Returns ros timestamp in pretty format """
+    return time.strftime("%a, %b %d, %I:%M.%S %p", time.localtime(timestamp.to_sec()))
+
+def prettyDuration(duration):
+    """ Returns duration into pretty format  Hours,Min,Sec """
+    secs = duration.to_sec()
+    in_future = False
+    if (secs < 0):
+        secs = -secs
+        in_future = True
+    secs_per_min  = 60.0
+    secs_per_hour = secs_per_min * 60.0
+    hours = math.floor(secs / secs_per_hour)
+    secs -= hours * secs_per_hour
+    mins = math.floor(secs / secs_per_min)
+    secs -= mins * secs_per_min
+    result = ""
+    if hours > 0:
+        result += ("%d hour%s "%(hours, "s" if hours > 1 else ""))
+    if mins > 0:
+        result += ("%d minute%s "%(mins, "s" if mins > 1 else ""))
+    if len(result) > 0:
+        result += "and "
+    result += "%d seconds "%int(secs)
+    if in_future:
+        result += "in the future"
+    else:
+        result += "ago"
+    return result
 
 class TopicSelectDialog(wx.Dialog):
     def __init__(self, parent):
@@ -225,7 +256,6 @@ class MainWindow(wx.Frame):
         self.topic_button = wx.Button(self, -1, "Select Topic")
         self.Bind(wx.EVT_BUTTON, self.OnChangeTopic, self.topic_button)
 
-
         # Scroll window with device information arranged in grid
         self.device_panel = DevicePanel(self)
 
@@ -246,9 +276,20 @@ class MainWindow(wx.Frame):
         vsizer0.Add(self.topic_text,0,wx.EXPAND)
         vsizer0.Add(self.topic_button, 0)
 
+        # Grid for displaying timestamps and duration of data
+        # Name of diagnostics topic
+        timestamp_grid = wx.grid.Grid(self)
+        timestamp_grid.CreateGrid(1,3)
+        timestamp_grid.SetColLabelValue(0, "New Time")
+        timestamp_grid.SetColLabelValue(1, "Old Time")
+        timestamp_grid.SetColLabelValue(2, "Duration")
+        timestamp_grid.SetRowLabelSize(0) # hide the row labels
+        timestamp_grid.AutoSize() 
+        self.timestamp_grid = timestamp_grid
 
         # device panel
         vsizer1 = wx.BoxSizer(wx.VERTICAL)
+        vsizer1.Add(self.timestamp_grid, 0, wx.EXPAND)
         vsizer1.Add(self.master_grid, 0, wx.EXPAND)
         vsizer1.Add(self.device_panel, 1, wx.EXPAND)
 
@@ -295,6 +336,7 @@ class MainWindow(wx.Frame):
 
         self.device_panel.updateDeviceGrid(tsd)
         self.updateMasterGrid(tsd)
+        self.updateTimestampGrid(tsd)
 
 
     def changeTopic(self, topic_name):
@@ -316,6 +358,17 @@ class MainWindow(wx.Frame):
             grid.SetReadOnly( 0, col );
         grid.AutoSize()
 
+    def updateTimestampGrid(self, tsd):
+        grid = self.timestamp_grid
+        grid.SetCellValue(0,0,prettyTimestamp(tsd.timestamp))
+        if tsd.timestamp_old is not None:
+            grid.SetCellValue(0,1,prettyTimestamp(tsd.timestamp_old))
+            duration = tsd.timestamp - tsd.timestamp_old
+            grid.SetCellValue(0,2,prettyDuration(duration))
+        else:
+            grid.SetCellValue(0,1,"")
+            grid.SetCellValue(0,2,"")
+        grid.AutoSize()
 
     def OnTimer(self, event):
         self.update()

@@ -53,6 +53,7 @@ from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
 class EtherCATHistoryTimestepData:
     def __init__(self,timestamp):
         self.timestamp = timestamp
+        self.timestamp_old = None
         self.devices = {}
         self.master = None
 
@@ -94,6 +95,7 @@ class EtherCATHistoryTimestepData:
 
         tsd_old = timestamp_data_old
         tsd_diff = EtherCATHistoryTimestepData(self.timestamp)
+        tsd_diff.timestamp_old = tsd_old.timestamp
 
         tsd_diff.master = self.master.getDiff(tsd_old.master)
 
