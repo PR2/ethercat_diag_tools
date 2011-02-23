@@ -265,7 +265,7 @@ class MainWindow(wx.Frame):
         master_grid.SetColLabelValue(0, "Sent")
         master_grid.SetColLabelValue(1, "Drops")
         master_grid.SetColLabelValue(2, "Late")
-        master_grid.SetColLabelValue(3, "Drops per Million Sends")
+        master_grid.SetColLabelValue(3, "Drops per Billion Sends")
         master_grid.SetColLabelValue(4, "Drops per Hour")
         master_grid.SetRowLabelSize(0) # hide the row labels
         master_grid.AutoSize() 
@@ -364,11 +364,11 @@ class MainWindow(wx.Frame):
         data[1] = CellData(dropped, ERROR if (dropped > 0) else DATA)
         data[2] = CellData(late   , WARN  if (late    > 0) else DATA)
         if sent != 0:
-            drops_per_million_sends = 1e6 * float(dropped) / float(sent)
+            drops_per_million_sends = 1e9 * float(dropped) / float(sent)
             if drops_per_million_sends > 3 : level = ERROR
             elif drops_per_million_sends > 1: level = WARN
             else: level = DATA
-            data[3] = CellData("%.3f"%drops_per_million_sends, level)
+            data[3] = CellData("%.2f"%drops_per_million_sends, level)
             if tsd.timestamp_old is not None:
                 secs_per_hour = 3600.
                 hours = (tsd.timestamp - tsd.timestamp_old).to_sec() / secs_per_hour
