@@ -42,7 +42,6 @@ import roslib
 roslib.load_manifest(PKG)
 from ethercat_monitor.cell_data import CellData, cell_data_empty
 
-
 class EtherCATDevicePortStatus:
     def __init__(self):
         self.rx_errors = 0
@@ -62,6 +61,14 @@ class EtherCATDevicePortStatus:
         port_diff.forwarded_rx_errors = self.forwarded_rx_errors - port_old.forwarded_rx_errors
         port_diff.lost_links = self.lost_links - port_old.lost_links
         return port_diff
+
+    def generateYaml(self):
+        out = {}
+        out['rx_errors'] = self.rx_errors
+        out['forwarded_rx_errors'] = self.forwarded_rx_errors
+        out['lost_links'] = self.lost_links
+        return out
+
 
 class EtherCATDevicePortMissing:
     """ Represets missing EtherCAT port data"""
@@ -110,6 +117,19 @@ class EtherCATDeviceStatus:
             ds_diff.ring_position = self.ring_position
         return ds_diff
 
+    def generateYaml(self):
+        out = {}
+        out['valid'] = self.valid
+        out['position'] = self.ring_position
+        out['epu_errors'] = self.epu_errors
+        out['pdi_errors'] = self.epu_errors
+
+        port_out = {}
+        for num,port in enumerate(self.ports):
+            port_out[num] = port.generateYaml()
+        out['ports'] = port_out
+
+        return out
 
 
 class EtherCATDeviceMissing:

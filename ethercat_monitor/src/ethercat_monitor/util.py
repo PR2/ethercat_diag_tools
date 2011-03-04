@@ -1,5 +1,3 @@
-
-
 #
 # Software License Agreement (BSD License)
 #
@@ -34,17 +32,36 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-import wx
-from ethercat_monitor.cell_data import CellData
+import time
+import math
 
-def levelToBackgroundColor(level):
-    if level is CellData.ERROR:
-        bg_color = wx.RED
-    elif level is CellData.WARN:
-        bg_color = wx.Colour(255,165,0)
-    elif level is CellData.GOOD:
-        bg_color = wx.GREEN
+def prettyTimestamp(timestamp):
+    """ Returns ros timestamp in pretty format """
+    return time.strftime("%a, %b %d, %I:%M.%S %p", time.localtime(timestamp.to_sec()))
+
+def prettyDuration(duration):
+    """ Returns duration into pretty format  Hours,Min,Sec """
+    secs = duration.to_sec()
+    in_future = False
+    if (secs < 0):
+        secs = -secs
+        in_future = True
+    secs_per_min  = 60.0
+    secs_per_hour = secs_per_min * 60.0
+    hours = math.floor(secs / secs_per_hour)
+    secs -= hours * secs_per_hour
+    mins = math.floor(secs / secs_per_min)
+    secs -= mins * secs_per_min
+    result = ""
+    if hours > 0:
+        result += ("%d hour%s "%(hours, "s" if hours > 1 else ""))
+    if mins > 0:
+        result += ("%d minute%s "%(mins, "s" if mins > 1 else ""))
+    if len(result) > 0:
+        result += "and "
+    result += "%d seconds "%int(secs)
+    if in_future:
+        result += "in the future"
     else:
-        bg_color = wx.WHITE
-    return bg_color    
-
+        result += "ago"
+    return result

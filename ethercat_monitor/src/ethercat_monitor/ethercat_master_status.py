@@ -73,3 +73,9 @@ class EtherCATMasterStatus:
         diff.late    = self.late    - old.late
         return diff
 
+    def generateYaml(self):
+        out = {}
+        out['sent'] = self.sent
+        out['dropped'] = self.dropped
+        out['late'] = self.late
+        return out

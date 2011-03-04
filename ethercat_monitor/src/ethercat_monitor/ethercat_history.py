@@ -49,6 +49,8 @@ import rospy
 from ethercat_monitor.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDeviceAddDiag
 from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
 
+from ethercat_monitor.util import prettyTimestamp, prettyDuration
+
 
 class EtherCATHistoryTimestepData:
     def __init__(self,timestamp):
@@ -89,6 +91,7 @@ class EtherCATHistoryTimestepData:
     def getMasterGrid(self):
         return self.master.getDataGrid()
 
+
     def getDiff(self, timestamp_data_old):
         """ returns new EthercatHistoryTimestampData that represents difference
         between both timesteps"""
@@ -119,6 +122,29 @@ class EtherCATHistoryTimestepData:
                 tsd_diff.addDevice(name, EtherCATDeviceMissing())
 
         return tsd_diff
+
+    def generateYaml(self):
+        # Order list of devices by position
+        
+        out = {}
+        
+        if self.timestamp_old is not None:
+            duration = self.timestamp - self.timestamp_old
+            out['duration'] = prettyDuration(duration)
+        else:
+            out['date'] = prettyTimestamp(self.timestamp)
+            out['ros_time'] = {'secs':self.timestamp.secs, 'nsecs':self.timestamp.nsecs}
+
+        out['master'] = self.master.generateYaml()
+
+        device_out = {}
+        for name,device in self.devices.iteritems():
+            device_out[name] = device.generateYaml()
+        out['devices'] = device_out
+        return out
+
+
+
 
 
 class EtherCATHistory:

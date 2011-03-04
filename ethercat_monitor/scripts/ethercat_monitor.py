@@ -65,9 +65,11 @@ import os.path
 import wx
 import wx.grid
 
+import yaml
 
 from ethercat_monitor.ethercat_history import EtherCATHistory
 from ethercat_monitor.wx_util import levelToBackgroundColor
+from ethercat_monitor.util import prettyTimestamp, prettyDuration
 from ethercat_monitor.device_panel import DevicePanel
 
 from ethercat_monitor.cell_data import CellData, cell_data_empty
@@ -141,37 +143,6 @@ def getDiagnosticTopics():
     return diag_topics
 
 
-def prettyTimestamp(timestamp):
-    """ Returns ros timestamp in pretty format """
-    return time.strftime("%a, %b %d, %I:%M.%S %p", time.localtime(timestamp.to_sec()))
-
-def prettyDuration(duration):
-    """ Returns duration into pretty format  Hours,Min,Sec """
-    secs = duration.to_sec()
-    in_future = False
-    if (secs < 0):
-        secs = -secs
-        in_future = True
-    secs_per_min  = 60.0
-    secs_per_hour = secs_per_min * 60.0
-    hours = math.floor(secs / secs_per_hour)
-    secs -= hours * secs_per_hour
-    mins = math.floor(secs / secs_per_min)
-    secs -= mins * secs_per_min
-    result = ""
-    if hours > 0:
-        result += ("%d hour%s "%(hours, "s" if hours > 1 else ""))
-    if mins > 0:
-        result += ("%d minute%s "%(mins, "s" if mins > 1 else ""))
-    if len(result) > 0:
-        result += "and "
-    result += "%d seconds "%int(secs)
-    if in_future:
-        result += "in the future"
-    else:
-        result += "ago"
-    return result
-
 class TopicSelectDialog(wx.Dialog):
     def __init__(self, parent):
         wx.Dialog.__init__(self,parent,-1,title='Select Diagnostics Topic')
@@ -243,7 +214,12 @@ class MainWindow(wx.Frame):
 
         # zero button
         self.zero_button = wx.Button(self, ZERO_BUTTON_ID, "Zero")
-        wx.EVT_BUTTON(self, ZERO_BUTTON_ID, self.OnZero)
+        self.Bind(wx.EVT_BUTTON, self.OnZero, self.zero_button)
+        #wx.EVT_BUTTON(self, ZERO_BUTTON_ID, self.OnZero)
+
+        # zero button
+        self.yaml_button = wx.Button(self, ZERO_BUTTON_ID, "Generate Yaml")
+        self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.yaml_button)
 
         # combo box allow choice between absolute and relative values
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
@@ -277,6 +253,8 @@ class MainWindow(wx.Frame):
         vsizer0.Add(self.display_combo, 0)
         vsizer0.Add(self.topic_text,0,wx.EXPAND)
         vsizer0.Add(self.topic_button, 0)
+        vsizer0.Add(self.yaml_button, 0)
+        
 
         # Grid for displaying timestamps and duration of data
         # Name of diagnostics topic
@@ -320,7 +298,7 @@ class MainWindow(wx.Frame):
         if topic_name is not None:
             self.changeTopic(topic_name)
 
-        self.Show(True)
+        self.Show(True)        
 
     def update(self):
         self.tsd_new = self.history.getNewestTimestepData()
@@ -385,6 +363,26 @@ class MainWindow(wx.Frame):
             grid.SetCellBackgroundColour(row,col,bg_color)
             grid.SetReadOnly( 0, col );
         grid.AutoSize()
+
+    def OnGenerateYaml(self, event):
+        self.tsd_new = self.history.getNewestTimestepData()
+        if self.tsd_new is None:
+            return 
+        if self.tsd_old is None:
+            self.tsd_old = self.tsd_new
+
+        tsd_new  = self.tsd_new
+        tsd_old  = self.tsd_old
+        tsd_diff = self.tsd_new.getDiff(self.tsd_old)
+        
+        out = {}
+        out['new'] = tsd_new.generateYaml()
+        out['old'] = tsd_old.generateYaml()
+        out['diff'] = tsd_diff.generateYaml()
+
+
+        print yaml.dump(out)
+        
 
     def updateTimestampGrid(self, tsd):
         grid = self.timestamp_grid
