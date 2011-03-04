@@ -74,6 +74,8 @@ from ethercat_monitor.device_panel import DevicePanel
 
 from ethercat_monitor.cell_data import CellData, cell_data_empty
 
+from ethercat_monitor.yaml_dialog import YamlDialog
+
 def usage(progname):
     print __doc__ % vars()    
 
@@ -380,9 +382,10 @@ class MainWindow(wx.Frame):
         out['old'] = tsd_old.generateYaml()
         out['diff'] = tsd_diff.generateYaml()
 
+        dlg = YamlDialog(self, yaml.dump(out))
+        dlg.ShowModal()
+        dlg.Destroy()
 
-        print yaml.dump(out)
-        
 
     def updateTimestampGrid(self, tsd):
         grid = self.timestamp_grid
