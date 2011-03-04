@@ -212,15 +212,15 @@ class MainWindow(wx.Frame):
         wx.EVT_MENU(self, ID_EXIT, self.OnQuit)
  
         DEVICE_TABLE_ID   = 10
-        ZERO_BUTTON_ID    = 11
+        #ZERO_BUTTON_ID    = 11
 
         # zero button
-        self.zero_button = wx.Button(self, ZERO_BUTTON_ID, "Zero")
+        self.zero_button = wx.Button(self, -1, "Zero")
         self.Bind(wx.EVT_BUTTON, self.OnZero, self.zero_button)
         #wx.EVT_BUTTON(self, ZERO_BUTTON_ID, self.OnZero)
 
         # zero button
-        self.yaml_button = wx.Button(self, ZERO_BUTTON_ID, "Generate Yaml")
+        self.yaml_button = wx.Button(self, -1, "Generate Yaml")
         self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.yaml_button)
 
         # combo box allow choice between absolute and relative values
