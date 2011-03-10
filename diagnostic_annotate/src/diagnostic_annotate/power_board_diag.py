@@ -41,7 +41,7 @@ PKG = 'diagnostic_annotate'
 import roslib
 roslib.load_manifest(PKG)
 
-from diagnostic_annotate.kv_convert import ConvertVar, KeyValueConvertList, VarStorage
+from diagnostic_annotate.kv_convert import ConvertVar, ConvertList, KeyValueConvertList, VarStorage
 from diagnostic_annotate.diag_event import DiagEvent, generic_event
 
 import re
@@ -49,6 +49,15 @@ import re
 def runstop_event(name, t, desc):
     """ Represents Run-Stop being pressed. """
     return DiagEvent('RunStopEvent', name, t, desc)
+
+
+def circuit_breaker_trip(name, t, circuit_breaker_num, new_trip_count, old_trip_count):
+    """ Repesents circuit breaker trip count increasing """
+    desc = "Circuit breaker %d tripped %d time(s)" % (circuit_breaker_num, new_trip_count - old_trip_count)
+    evt = DiagEvent('CircuitBreakerTrip', name, t, desc)
+    evt.data = {'circuit_breaker_num': circuit_breaker_num, 'old_trip_count' : old_trip_count, 'new_trip_count' : new_trip_count}
+    return evt
+
 
 def str_to_bool(str):
     if (str == "True"):
@@ -72,6 +81,10 @@ class PowerBoardDiag:
         kvl.add('RunStop Button Status', ConvertVar('runstop_button_status', str_to_bool, True))
         kvl.add('RunStop Wireless Status', ConvertVar('runstop_wireless_status', str_to_bool, True))
 
+        # track counters for each power board breaker 
+        for i in range(3):
+            kvl.add('CB%d Trip Count'%i, ConvertList('trip_count', int, i, 0))
+
         self.kvl = kvl
         self.old = VarStorage()
         kvl.set_defaults(self.old)
@@ -89,6 +102,10 @@ class PowerBoardDiag:
         if not new_runstop_status and self.old_runstop_status:
             desc = "Runstop" #Button=%s Wireless=%s" % (str(new.runstop_button_status), str(new.runstop_wireless_status))
             event_list.append(runstop_event(name, t, desc))            
+
+        for i in range(3):
+            if new.trip_count[i] != old.trip_count[i]:
+                event_list.append(circuit_breaker_trip(name, t, i, new.trip_count[i], old.trip_count[i]))
 
         self.old = new
         self.level = msg.level
