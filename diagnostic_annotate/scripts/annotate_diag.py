@@ -203,15 +203,16 @@ def main(argv):
       usage(progname)
       return 1
 
-    diag_list = []
-    diag_map = {}
-
-    EtherCATMasterDiag(diag_map)
-    RealtimeControlLoopDiag(diag_map)
-    EtherCATDeviceAddDiag(diag_list, diag_map)
-    PowerBoardAddDiag(diag_list, diag_map)
-
     for inbag_filename in argv:
+
+        diag_list = []
+        diag_map = {}
+
+        EtherCATMasterDiag(diag_map)
+        RealtimeControlLoopDiag(diag_map)
+        EtherCATDeviceAddDiag(diag_list, diag_map)
+        PowerBoardAddDiag(diag_list, diag_map)
+
         try:
             process_bag(inbag_filename, diag_list, diag_map)
         except KeyboardInterrupt:
