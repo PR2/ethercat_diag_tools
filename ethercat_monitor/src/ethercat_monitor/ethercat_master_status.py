@@ -48,11 +48,13 @@ class EtherCATMasterStatus:
         self.sent    = sent
         self.dropped = dropped
         self.late    = late
+        self.unassigned_drops = 0.0
 
     def __str__(self):
         result  = "   Sent     : %d\n" % self.sent
         result += "   Dropped  : %d\n" % self.dropped
         result += "   Late     : %d\n" % self.late
+        result += "   Unassigned : %f\n" % self.unassigned_drops
         return result
 
     def getDataGrid(self):
@@ -71,6 +73,7 @@ class EtherCATMasterStatus:
         diff.sent    = self.sent    - old.sent
         diff.dropped = self.dropped - old.dropped
         diff.late    = self.late    - old.late
+        diff.unassigned_drops = self.unassigned_drops - old.unassigned_drops
         return diff
 
     def generateYaml(self):
@@ -78,4 +81,5 @@ class EtherCATMasterStatus:
         out['sent'] = self.sent
         out['dropped'] = self.dropped
         out['late'] = self.late
+        out['unassigned_drops'] = self.unassigned_drops
         return out

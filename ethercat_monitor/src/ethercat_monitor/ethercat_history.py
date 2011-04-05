@@ -52,6 +52,102 @@ from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
 from ethercat_monitor.util import prettyTimestamp, prettyDuration
 
 
+class DropEstimator:
+    """ Assigns packet drops to one or more EtherCAT devices.
+    Usually RX errors counters increase a cycle after a packet drops occurs. 
+    To handle this, this keeps some history to properly assign packet 
+    drops to the correct device.
+    """
+    def __init__(self):
+        self.last_unassigned_drops = 0.0
+        self.timestamp_data_old = None
+        self.cycle_count = 0
+    
+    def process(self, timestamp_data):        
+        """ Takes EtherCAT device and Master data and calculates 
+            estimate dropped packets for each EtherCAT device port"""
+
+        tsd_new = timestamp_data
+        tsd_old = self.timestamp_data_old
+        if tsd_old is None:
+            self.timestamp_data_old = timestamp_data
+            return 
+        
+        # This is a little sloppy because sometimes packets are counted as
+        # late before they are counted as dropped, however this situation is
+        # not incredibly common 
+        dropped_new = tsd_new.master.dropped - tsd_new.master.late
+        dropped_old = tsd_old.master.dropped - tsd_old.master.late
+        drops = dropped_new - dropped_old
+
+        # determine which device caused dropped packets, by looking for devices
+        # where RX error count increased.  If multiple devices have rx errors
+        # at same time, split dropped between devices based on how much RX error
+        # increased for each device
+                       
+        # Create list of port pairs between old and new data
+        # port pairs list is tupple of (device_name, port_number, 'port_new', port_old)
+        port_pairs = []
+        for name,dev_new in tsd_new.devices.iteritems():
+            if name not in tsd_old.devices:
+                print "Warning found device %s in new data but not old data" % name
+            else:                
+                dev_old = tsd_old.devices[name]
+                if len(dev_old.ports) != len(dev_new.ports):
+                    print "Number of ports do not match beween old (%d) an new (%d) devices" % (len(dev_old.ports), len(dev_new.ports))
+                else:
+                    for port_num in range(len(dev_new.ports)):                        
+                        port_pairs.append( (name, port_num, dev_new.ports[port_num], dev_old.ports[port_num]) )
+
+        # sum new rx_errors for all devices
+        rx_error_sum = 0.0  # should be float
+        for dev_name, port_num, port_new, port_old in port_pairs:
+            rx_error_sum += port_new.rx_errors - port_old.rx_errors
+
+        # devices can have multiple rx_errors when there are no drops 
+        # and even sometimes rx errors when there are no drops
+        # however, there must be at least 1 rx_error per drop, if a device has only
+        # 1 rx_error and there are 20 drops, the at most 1 drops was caused by a device
+
+        # First assign each unassigned from last cycle to RX errors from this cycle
+        # Any remaining drops from last cycle will be given to ethercat master
+        device_drops = min(self.last_unassigned_drops, rx_error_sum)
+        master_unassigned_drops = self.last_unassigned_drops - device_drops
+        remaining_rx_error_sum  = rx_error_sum - device_drops
+        tsd_new.master.unassigned_drops = tsd_old.master.unassigned_drops + master_unassigned_drops
+
+        # take remaining rx_errors and assign them to drops from this cycle
+        unassigned_drops = max(drops - remaining_rx_error_sum, 0)
+        device_drops += drops - unassigned_drops
+
+
+        self.cycle_count += 1
+        if (device_drops > 0.0) or (rx_error_sum > 0.0) or (drops > 0.0) or (unassigned_drops > 0.0) or (self.last_unassigned_drops > 0.0):
+            print
+            print "cycle", self.cycle_count
+            print "rx_error_sum", rx_error_sum
+            print "drops", drops
+            print "device_drops", device_drops
+            print "remaining_rx_error_sum", remaining_rx_error_sum
+            print "master_unassigned_drops", master_unassigned_drops
+            print "last_unassigned_drops", self.last_unassigned_drops
+            print "unassigned_drops", unassigned_drops
+            print
+
+        self.last_unassigned_drops = unassigned_drops
+
+        if device_drops > 0:
+            # divide drops against all devices with increased rx_error count            
+            for dev_name, port_num, port_new, port_old in port_pairs:
+                rx_errors = port_new.rx_errors - port_old.rx_errors
+                port_new.est_drops = port_old.est_drops + device_drops * (rx_errors / rx_error_sum)    
+        else:
+            for dev_name, port_num, port_new, port_old in port_pairs:
+                port_new.est_drops = port_old.est_drops
+
+        self.timestamp_data_old = tsd_new
+
+
 class EtherCATHistoryTimestepData:
     def __init__(self,timestamp):
         self.timestamp = timestamp
@@ -146,7 +242,6 @@ class EtherCATHistoryTimestepData:
 
 
 
-
 class EtherCATHistory:
     def __init__(self):
         self.END = "END"
@@ -154,6 +249,7 @@ class EtherCATHistory:
         self.lock = threading.Lock()
         self.subscription = None
         self.reset()
+        self.drop_estimator = DropEstimator()
 
     def reset(self):
         with self.lock:
@@ -170,8 +266,10 @@ class EtherCATHistory:
         with self.lock:
             if (len(self.history) > 0) and (timestep_data.timestamp < self.history[-1].timestamp):
                 raise RuntimeError("New data is older than previous data in history")
-            #self.history.append(timestep_data)
+            # if there is older data, use it to process timestep data
+            self.drop_estimator.process(timestep_data)
             # For now just remember most recent data, instead of storing history.
+            #self.history.append(timestep_data)
             self.history = [timestep_data]
 
     def getTimestepData(self, timestamp):

@@ -51,7 +51,7 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
 
         # Device grid
         device_grid = wx.grid.Grid(self) 
-        device_grid.CreateGrid(0,11)
+        device_grid.CreateGrid(0,12)
         device_grid.SetColLabelValue(0, "Device")
         device_grid.SetColLabelValue(1, "HWID");
         device_grid.SetColLabelValue(2, "Position")
@@ -59,10 +59,12 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
         device_grid.SetColLabelValue(4, "Port")
         device_grid.SetColLabelValue(5, "LostLink")
         device_grid.SetColLabelValue(6, "Rx")
-        device_grid.SetColLabelValue(7, "Empty")
-        device_grid.SetColLabelValue(8, "FwdRx")
-        device_grid.SetColLabelValue(9, "EPU")
-        device_grid.SetColLabelValue(10, "PDI")
+        device_grid.SetColLabelValue(7, "Est Drops")
+
+        device_grid.SetColLabelValue(8, "Empty")
+        device_grid.SetColLabelValue(9, "FwdRx")
+        device_grid.SetColLabelValue(10, "EPU")
+        device_grid.SetColLabelValue(11, "PDI")
 
         device_grid.SetRowLabelSize(0) # hide the row labels
         device_grid.AutoSize()
@@ -90,20 +92,24 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
         WARN = CellData.WARN
         DATA = CellData.DATA
         for position,name,device in ordered_devices:
-            new_data = [ [ cell_data_empty for unused in range(11) ] for port in device.ports ]
+            new_data = [ [ cell_data_empty for unused in range(12) ] for port in device.ports ]
             for num,port in enumerate(device.ports):
                 row_data = new_data[num]
                 row_data[4] = CellData('Port%d'%num)
                 row_data[5] = CellData(port.lost_links, ERROR if (port.lost_links != 0) else DATA)
                 row_data[6] = CellData(port.rx_errors, ERROR if (port.rx_errors != 0) else DATA)
-                row_data[8] = CellData(port.forwarded_rx_errors, WARN if (port.forwarded_rx_errors != 0) else DATA)
+                if port.est_drops is None:                
+                    row_data[7] = CellData("?", WARN)
+                else:
+                    row_data[7] = CellData(port.est_drops, ERROR if (port.est_drops != 0) else DATA)
+                row_data[9] = CellData(port.forwarded_rx_errors, WARN if (port.forwarded_rx_errors != 0) else DATA)
             row_data = new_data[0] 
             row_data[0]  = CellData(name, DATA if (device.valid) else ERROR)
             row_data[1]  = CellData(device.hardware_id, DATA if (device.valid) else ERROR)
             row_data[2]  = CellData(device.ring_position, ERROR if (device.ring_position is None) else DATA)
             row_data[3]  = CellData(device.valid, DATA if (device.valid) else ERROR)            
-            row_data[9]  = CellData(device.epu_errors, ERROR if (device.epu_errors != 0) else DATA)
-            row_data[10] = CellData(device.pdi_errors, ERROR if (device.pdi_errors != 0) else DATA)
+            row_data[10]  = CellData(device.epu_errors, ERROR if (device.epu_errors != 0) else DATA)
+            row_data[11] = CellData(device.pdi_errors, ERROR if (device.pdi_errors != 0) else DATA)
             data += new_data
 
         # Re-adjust grid to have appropriate number of rows

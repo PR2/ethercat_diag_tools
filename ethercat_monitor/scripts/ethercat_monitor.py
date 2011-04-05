@@ -239,12 +239,13 @@ class MainWindow(wx.Frame):
 
         # Master grid
         master_grid = wx.grid.Grid(self)
-        master_grid.CreateGrid(1,5)
+        master_grid.CreateGrid(1,6)
         master_grid.SetColLabelValue(0, "Sent")
         master_grid.SetColLabelValue(1, "Drops")
         master_grid.SetColLabelValue(2, "Late")
         master_grid.SetColLabelValue(3, "Drops per Billion Sends")
         master_grid.SetColLabelValue(4, "Drops per Hour")
+        master_grid.SetColLabelValue(5, "Unassigned Drops")
         master_grid.SetRowLabelSize(0) # hide the row labels
         master_grid.AutoSize() 
         self.master_grid = master_grid
@@ -335,7 +336,7 @@ class MainWindow(wx.Frame):
         DATA = CellData.DATA
         empty = cell_data_empty #CellData()
         master = tsd.master
-        data = [empty for i in range(5)]
+        data = [empty for i in range(6)]
         sent = master.sent
         dropped = master.dropped
         late = master.late
@@ -357,6 +358,11 @@ class MainWindow(wx.Frame):
                 elif (drops_per_hour > 1): level = WARN
                 else : level = DATA
                 data[4] = CellData("%.2f"%drops_per_hour, level)
+            unassigned_drops = tsd.master.unassigned_drops
+            if unassigned_drops is None:
+                data[5] = CellData("?", WARN)
+            else:
+                data[5] = CellData(unassigned_drops, ERROR if (unassigned_drops > 0) else DATA)
         grid = self.master_grid
         row = 0
         for col,cell_data in enumerate(data):
