@@ -46,12 +46,14 @@ class EtherCATDevicePortStatus:
     def __init__(self):
         self.rx_errors = 0
         self.forwarded_rx_errors = 0
+        self.frame_errors = 0
         self.lost_links = 0
         self.est_drops = 0.0
 
     def __str__(self):
         result  = "   RX errors     : %d\n" % self.rx_errors
         result += "   FWD RX errors : %d\n" % self.forwarded_rx_errors
+        result += "   Invalid Frame : %d\n" % self.frame_errors
         result += "   Lost Links    : %d\n" % self.lost_links
         result += "   Est drops     : %f\n" % self.est_drops
         return result
@@ -61,6 +63,7 @@ class EtherCATDevicePortStatus:
         port_diff = EtherCATDevicePortStatus()
         port_diff.rx_errors = self.rx_errors - port_old.rx_errors
         port_diff.forwarded_rx_errors = self.forwarded_rx_errors - port_old.forwarded_rx_errors
+        port_diff.frame_errors = self.frame_errors - port_old.frame_errors
         port_diff.lost_links = self.lost_links - port_old.lost_links
         port_diff.est_drops = self.est_drops - port_old.est_drops
         return port_diff
@@ -69,6 +72,7 @@ class EtherCATDevicePortStatus:
         out = {}
         out['rx_errors'] = self.rx_errors
         out['forwarded_rx_errors'] = self.forwarded_rx_errors
+        out['frame_errors'] = self.frame_errors
         out['lost_links'] = self.lost_links
         out['est_drops'] = self.est_drops
         return out

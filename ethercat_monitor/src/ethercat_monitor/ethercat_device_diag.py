@@ -75,6 +75,7 @@ class EtherCATDeviceDiag:
             kvl.add('RX Error Port %d'%i, ConvertList('rx_errors', int, i, 0))
             kvl.add('Forwarded RX Error Port %d'%i, ConvertList('forwarded_rx_errors', int, i, 0))
             kvl.add('Lost Link Port %d'%i, ConvertList('lost_links', int, i, 0))
+            kvl.add('Invalid Frame Port %d'%i, ConvertList('frame_errors', int, i, 0))
         self.kvl = kvl
 
         
@@ -101,6 +102,7 @@ class EtherCATDeviceDiag:
         for port_num in range(self.num_ports):            
             port = device_status.ports[port_num]
             port.rx_errors = new.rx_errors[port_num]
+            port.frame_errors = new.frame_errors[port_num]
             port.forwarded_rx_errors = new.forwarded_rx_errors[port_num]
             port.lost_links = new.lost_links[port_num]
 

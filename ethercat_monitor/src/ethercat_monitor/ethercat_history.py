@@ -54,7 +54,7 @@ from ethercat_monitor.util import prettyTimestamp, prettyDuration
 
 class DropEstimator:
     """ Assigns packet drops to one or more EtherCAT devices.
-    Usually RX errors counters increase a cycle after a packet drops occurs. 
+    Usually frame errors counters increase a cycle after a packet drops occurs. 
     To handle this, this keeps some history to properly assign packet 
     drops to the correct device.
     """
@@ -78,15 +78,15 @@ class DropEstimator:
         # not incredibly common 
         dropped_new = tsd_new.master.dropped - tsd_new.master.late
         dropped_old = tsd_old.master.dropped - tsd_old.master.late
-        drops = dropped_new - dropped_old
+        drops = dropped_new - dropped_old        
 
         # determine which device caused dropped packets, by looking for devices
-        # where RX error count increased.  If multiple devices have rx errors
-        # at same time, split dropped between devices based on how much RX error
+        # where frame error count increased.  If multiple devices have frame errors
+        # at same time, split dropped between devices based on how much frame error
         # increased for each device
                        
         # Create list of port pairs between old and new data
-        # port pairs list is tupple of (device_name, port_number, 'port_new', port_old)
+        # port_pairs list is tupple of (device_name, port_number, port_new, port_old)
         port_pairs = []
         for name,dev_new in tsd_new.devices.iteritems():
             if name not in tsd_old.devices:
@@ -99,36 +99,36 @@ class DropEstimator:
                     for port_num in range(len(dev_new.ports)):                        
                         port_pairs.append( (name, port_num, dev_new.ports[port_num], dev_old.ports[port_num]) )
 
-        # sum new rx_errors for all devices
-        rx_error_sum = 0.0  # should be float
+        # sum new frame_errors for all devices
+        frame_error_sum = 0.0  # should be float
         for dev_name, port_num, port_new, port_old in port_pairs:
-            rx_error_sum += port_new.rx_errors - port_old.rx_errors
+            frame_error_sum += port_new.frame_errors - port_old.frame_errors
 
-        # devices can have multiple rx_errors when there are no drops 
-        # and even sometimes rx errors when there are no drops
-        # however, there must be at least 1 rx_error per drop, if a device has only
-        # 1 rx_error and there are 20 drops, the at most 1 drops was caused by a device
+        # multiple devices might have a frame_error for same packet 
+        # However, only one packet is dropped from master's point of view.
+        # There is also the possibility that the packet is corrupted (dropped) on the 
+        # way back to the computer which would not generate any frame errors
 
-        # First assign each unassigned from last cycle to RX errors from this cycle
-        # Any remaining drops from last cycle will be given to ethercat master
-        device_drops = min(self.last_unassigned_drops, rx_error_sum)
+        # First assign each unassigned drops from last cycle to frame errors for this cycle
+        # Any remaining drops from last cycle will be given to ethercat master as unassigned drops
+        device_drops = min(self.last_unassigned_drops, frame_error_sum)
         master_unassigned_drops = self.last_unassigned_drops - device_drops
-        remaining_rx_error_sum  = rx_error_sum - device_drops
+        remaining_frame_error_sum  = frame_error_sum - device_drops
         tsd_new.master.unassigned_drops = tsd_old.master.unassigned_drops + master_unassigned_drops
 
-        # take remaining rx_errors and assign them to drops from this cycle
-        unassigned_drops = max(drops - remaining_rx_error_sum, 0)
+        # take remaining drop and assign them to frame errors from this cycle
+        # any remaining drops get passed to next cycle
+        unassigned_drops = max(drops - remaining_frame_error_sum, 0)
         device_drops += drops - unassigned_drops
 
-
         self.cycle_count += 1
-        if (device_drops > 0.0) or (rx_error_sum > 0.0) or (drops > 0.0) or (unassigned_drops > 0.0) or (self.last_unassigned_drops > 0.0):
+        if (device_drops > 0.0) or (frame_error_sum > 0.0) or (drops > 0.0) or (unassigned_drops > 0.0) or (self.last_unassigned_drops > 0.0):
             print
             print "cycle", self.cycle_count
-            print "rx_error_sum", rx_error_sum
+            print "frame_error_sum", frame_error_sum
             print "drops", drops
             print "device_drops", device_drops
-            print "remaining_rx_error_sum", remaining_rx_error_sum
+            print "remaining_frame_error_sum", remaining_frame_error_sum
             print "master_unassigned_drops", master_unassigned_drops
             print "last_unassigned_drops", self.last_unassigned_drops
             print "unassigned_drops", unassigned_drops
@@ -137,10 +137,10 @@ class DropEstimator:
         self.last_unassigned_drops = unassigned_drops
 
         if device_drops > 0:
-            # divide drops against all devices with increased rx_error count            
+            # divide drops against all devices with increased frame_error count            
             for dev_name, port_num, port_new, port_old in port_pairs:
-                rx_errors = port_new.rx_errors - port_old.rx_errors
-                port_new.est_drops = port_old.est_drops + device_drops * (rx_errors / rx_error_sum)    
+                frame_errors = port_new.frame_errors - port_old.frame_errors
+                port_new.est_drops = port_old.est_drops + device_drops * (frame_errors / frame_error_sum)    
         else:
             for dev_name, port_num, port_new, port_old in port_pairs:
                 port_new.est_drops = port_old.est_drops
