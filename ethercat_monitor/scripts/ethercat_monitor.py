@@ -80,14 +80,14 @@ def usage(progname):
     print __doc__ % vars()    
 
 
+_yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
+
+
 # TODO :
 #  Widget to select between absolute a interval error counts
-#  Dialog box to select different diagnostics topic
-#  Put box for duration since zeroing/starting
 #  Keep track of port opened/closed status
-#  Keep track of diagnostics valid state
 #  Unit tests
-
+#  History of zeros (and possibly master resets, etc...)
 
 # TODO (later):
 #  Button to take timestamps
@@ -219,9 +219,11 @@ class MainWindow(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.OnZero, self.zero_button)
         #wx.EVT_BUTTON(self, ZERO_BUTTON_ID, self.OnZero)
 
-        # zero button
-        self.yaml_button = wx.Button(self, -1, "Generate Yaml")
+        self.yaml_button = wx.Button(self, -1, "View Yaml")
         self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.yaml_button)
+
+        self.save_default_button = wx.Button(self, -1, "Save Yaml")
+        self.Bind(wx.EVT_BUTTON, self.OnSaveDefault, self.save_default_button)
 
         # combo box allow choice between absolute and relative values
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
@@ -257,7 +259,7 @@ class MainWindow(wx.Frame):
         vsizer0.Add(self.topic_text,0,wx.EXPAND)
         vsizer0.Add(self.topic_button, 0)
         vsizer0.Add(self.yaml_button, 0)
-        
+        vsizer0.Add(self.save_default_button, 0)
 
         # Grid for displaying timestamps and duration of data
         # Name of diagnostics topic
@@ -372,10 +374,10 @@ class MainWindow(wx.Frame):
             grid.SetReadOnly( 0, col );
         grid.AutoSize()
 
-    def OnGenerateYaml(self, event):
+    def genYaml(self):
         self.tsd_new = self.history.getNewestTimestepData()
         if self.tsd_new is None:
-            return 
+            return None
         if self.tsd_old is None:
             self.tsd_old = self.tsd_new
 
@@ -387,11 +389,52 @@ class MainWindow(wx.Frame):
         out['new'] = tsd_new.generateYaml()
         out['old'] = tsd_old.generateYaml()
         out['diff'] = tsd_diff.generateYaml()
+        return yaml.dump(out)
+    
 
-        dlg = YamlDialog(self, yaml.dump(out))
+    def OnGenerateYaml(self, event):
+        out = self.genYaml();
+        dlg = YamlDialog(self, out)
         dlg.ShowModal()
         dlg.Destroy()
 
+    def displayErrorDialog(self, message):
+        dlg = wx.MessageDialog(self, message, caption="Error", style=(wx.OK | wx.CENTRE | wx.ICON_ERROR))
+        dlg.ShowModal()
+        dlg.Destroy()  
+        
+    def OnSaveDefault(self, event):    
+        """ Save yaml output in prefined location based on data and part #"""        
+        out = self.genYaml();
+        if out is None:
+            self.displayErrorDialog("Nothing to save")            
+            return
+
+        partnum = wx.GetTextFromUser('Please scan barcode for part', 'Scan Part Barcode')
+        if len(partnum) == 0:
+            self.displayErrorDialog("No part number.  File not saved")
+            return
+
+        timestr = time.strftime("%a_%b_%d_%I:%M_%p", time.localtime())
+        dirpath = os.path.join(_yaml_output_directory, partnum)
+        fn = os.path.join(dirpath, timestr+'.yaml')
+
+        # use use data as part of filename 
+        try:
+            if not os.path.isdir(dirpath):
+                os.makedirs(dirpath,0777)
+            f = open(fn, 'w', 0777)
+            f.write(out) 
+            f.close()
+        except Exception, e:
+            print "Error saving Yaml :", e
+            self.displayErrorDialog("Error saving Yaml : " + str(e))
+            return
+
+        dlg = wx.MessageDialog(self, ("Yaml File Saved to %s"%fn), \
+                                   caption="Info", style=(wx.OK | wx.CENTRE | wx.ICON_INFORMATION))
+        dlg.ShowModal()
+        dlg.Destroy()    
 
     def updateTimestampGrid(self, tsd):
         grid = self.timestamp_grid
