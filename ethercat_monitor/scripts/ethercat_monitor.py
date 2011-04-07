@@ -76,6 +76,7 @@ from ethercat_monitor.cell_data import CellData, cell_data_empty
 
 from ethercat_monitor.yaml_dialog import YamlDialog
 
+
 def usage(progname):
     print __doc__ % vars()    
 
@@ -229,6 +230,10 @@ class MainWindow(wx.Frame):
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
         self.display_combo.SetSelection(0)  # set selection to absolute on startup
 
+        # combo box allow choice between different ordering of devices
+        self.order_combo = wx.ComboBox(self, -1, choices=['Position Order', 'Packet Order'], style=wx.CB_READONLY)
+        self.order_combo.SetSelection(0)  # set selection to absolute on startup
+
         # Name of diagnostics topic
         self.topic_text = wx.TextCtrl(self, -1, "", style = wx.TE_READONLY)
 
@@ -260,6 +265,7 @@ class MainWindow(wx.Frame):
         vsizer0.Add(self.topic_button, 0)
         vsizer0.Add(self.yaml_button, 0)
         vsizer0.Add(self.save_default_button, 0)
+        vsizer0.Add(self.order_combo, 0)
 
         # Grid for displaying timestamps and duration of data
         # Name of diagnostics topic
@@ -319,7 +325,13 @@ class MainWindow(wx.Frame):
         else:
             tsd = self.tsd_new.getDiff(self.tsd_old)
 
-        self.device_panel.updateDeviceGrid(tsd)
+        order_item = self.order_combo.GetSelection()
+        if order_item == 0:
+            device_grid_mode = "position_order"
+        else:
+            device_grid_mode = "packet_order"
+
+        self.device_panel.updateDeviceGrid(tsd, device_grid_mode)
         self.updateMasterGrid(tsd)
         self.updateTimestampGrid(tsd)
 
@@ -396,7 +408,7 @@ class MainWindow(wx.Frame):
         out = self.genYaml();
         dlg = YamlDialog(self, out)
         dlg.ShowModal()
-        dlg.Destroy()
+        dlg.Destroy()        
 
     def displayErrorDialog(self, message):
         dlg = wx.MessageDialog(self, message, caption="Error", style=(wx.OK | wx.CENTRE | wx.ICON_ERROR))

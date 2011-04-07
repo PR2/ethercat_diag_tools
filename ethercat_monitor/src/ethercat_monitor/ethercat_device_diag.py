@@ -54,6 +54,9 @@ def _strToBool(strval):
     return bool(_true_re.search(strval))
 
 
+def _port_open(strval):
+    return bool(re.search("Open",strval))
+
 class EtherCATDeviceDiag:
     """ Looks for network errors in a specific EtherCAT Device """
     def __init__(self, name, num_ports):
@@ -76,6 +79,7 @@ class EtherCATDeviceDiag:
             kvl.add('Forwarded RX Error Port %d'%i, ConvertList('forwarded_rx_errors', int, i, 0))
             kvl.add('Lost Link Port %d'%i, ConvertList('lost_links', int, i, 0))
             kvl.add('Invalid Frame Port %d'%i, ConvertList('frame_errors', int, i, 0))
+            kvl.add('Status Port %d'%i, ConvertList('open', _port_open, i, False))
         self.kvl = kvl
 
         
@@ -99,13 +103,13 @@ class EtherCATDeviceDiag:
         device_status.pdi_errors = new.pdi_errors
         device_status.ring_position = self.ring_position
         device_status.valid = new.valid
-        for port_num in range(self.num_ports):            
+        for port_num in range(self.num_ports):                        
             port = device_status.ports[port_num]
             port.rx_errors = new.rx_errors[port_num]
             port.frame_errors = new.frame_errors[port_num]
             port.forwarded_rx_errors = new.forwarded_rx_errors[port_num]
             port.lost_links = new.lost_links[port_num]
-
+            port.open = new.open[port_num]
         return device_status
 
 

@@ -66,6 +66,12 @@ class EtherCATDevicePortStatus:
         port_diff.frame_errors = self.frame_errors - port_old.frame_errors
         port_diff.lost_links = self.lost_links - port_old.lost_links
         port_diff.est_drops = self.est_drops - port_old.est_drops
+
+        if self.open != port_old.open:
+            port_diff.open = None
+        else:
+            port_diff.open = self.open
+
         return port_diff
 
     def generateYaml(self):
@@ -123,7 +129,10 @@ class EtherCATDeviceStatus:
             ds_diff.ring_position = None
         else:
             ds_diff.ring_position = self.ring_position
+
         return ds_diff
+
+
 
     def generateYaml(self):
         out = {}
