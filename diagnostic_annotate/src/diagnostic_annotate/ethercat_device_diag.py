@@ -75,6 +75,19 @@ def motor_model_warning(name, t):
     """ Represents motor model warning"""
     return DiagEvent('MotorModelWarning', name, t, "Motor model warning")
 
+def device_reset_error(name, t):
+    """ Represents "Device reset likely" event. """
+    return DiagEvent('DeviceResetLikely', name, t, "Device reset likely")
+
+
+def yes_no_to_bool(str):
+    if (str == "Yes"):
+        return True
+    elif (str == "No"):
+        return False
+    else:
+        raise Exception("Not yes/no boolean : %s" % str)
+
 
 class SafetyDisableStatus:
     def __init__(self, str):
@@ -130,6 +143,8 @@ class EtherCATDeviceDiag(object):
             kvl.add('RX Error Port %d'%i, ConvertList('rx_error', int, i, 0))
             kvl.add('Lost Link Port %d'%i, ConvertList('lost_link', int, i, 0))
         
+        kvl.add('Reset detected', ConvertVar('reset_detected', yes_no_to_bool, False))
+
         self.old = VarStorage()
         kvl.set_defaults(self.old)
         
@@ -148,6 +163,9 @@ class EtherCATDeviceDiag(object):
         if num_ports != self.num_ports:
             event_list.append(generic_event(name, t, "changing number of ports from %d to %d" % (self.num_ports, num_ports)))
             self.num_ports = num_ports
+
+        if new.reset_detected and not old.reset_detected:
+            event_list.append(device_reset_error(self.name, t))
 
         for port in range(self.num_ports):
             if new.rx_error[port] != old.rx_error[port]:
@@ -175,7 +193,7 @@ class WGEtherCATDeviceDiag(EtherCATDeviceDiag):
         self.motor_model_warning_re = re.compile("Potential problem with the MCB, motor, encoder, or actuator model",  re.IGNORECASE)
         self.has_motor_model_error   = False
         self.has_motor_model_warning = False
-        
+
         self.old = VarStorage()
         kvl.set_defaults(self.old)
 
