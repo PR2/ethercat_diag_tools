@@ -149,8 +149,9 @@ def process_bag(inbag_filename, diag_list, diag_map):
     print bag
 
     #for topic, msg, tbag in rosrecord.logplayer(inbag_filename):
-    all_event_list = []    
-    for topic, msg, t in bag.read_messages(topics=['/diagnostics']):
+    all_event_list = []
+    t = None
+    for topic, msg, t in bag.read_messages(topics=['/diagnostics', 'diagnostics']):
         t = msg.header.stamp # use timestamp from diagnostic msg head instead of bag timestamp
         header = False
         event_list = []
@@ -183,8 +184,10 @@ def process_bag(inbag_filename, diag_list, diag_map):
     yaml.dump(yaml_output,stream=output_file)
     output_file.close()
 
-    print "Log ends %s" % time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(t.to_sec()))
-
+    if t is not None:
+        print "Log ends %s" % time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(t.to_sec()))
+    else:
+        print "Log contains no diagnostic messages"
 
 def main(argv):
     progname = argv[0]
