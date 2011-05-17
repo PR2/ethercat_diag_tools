@@ -55,10 +55,10 @@ def undervoltage_lockout_event(name, t, desc):
     """ Represents undervoltage lockout of EtherCAT device """
     return DiagEvent('UndervoltageLockoutEvent', name, t, desc)
 
-def rx_error_event(name, t, port, rx_errors):
-    """ Represents RX errors on specific port of an EtherCAT device"""
-    evt =  DiagEvent('RxError', name, t, '%d RX errors on port %d' % (rx_errors, port))
-    evt.data = {'port' : port, 'rx_errors' : rx_errors}
+def rx_error_event(name, t, port, rx_errors, invalid_frames):
+    """ Represents RX errors or invalid frames on specific port of an EtherCAT device"""
+    evt =  DiagEvent('RxError', name, t, '%d RX errors and %d invalid frames on port %d' % (rx_errors, port, invalid_frames))
+    evt.data = {'port' : port, 'rx_errors' : rx_errors, 'invalid_frames' : invalid_frames}
     return evt
 
 def lost_link_event(name, t, port, lost_links):
@@ -142,6 +142,7 @@ class EtherCATDeviceDiag(object):
         for i in range(4):
             kvl.add('RX Error Port %d'%i, ConvertList('rx_error', int, i, 0))
             kvl.add('Lost Link Port %d'%i, ConvertList('lost_link', int, i, 0))
+            kvl.add('Invalid Frame Port %d'%i, ConvertList('invalid_frame', int, i, 0))
         
         kvl.add('Reset detected', ConvertVar('reset_detected', yes_no_to_bool, False))
 
@@ -168,8 +169,10 @@ class EtherCATDeviceDiag(object):
             event_list.append(device_reset_error(self.name, t))
 
         for port in range(self.num_ports):
-            if new.rx_error[port] != old.rx_error[port]:
-                event = rx_error_event(name,t, port, (new.rx_error[port] - old.rx_error[port]))
+            if (new.rx_error[port] != old.rx_error[port]) or (new.invalid_frame[port] != old.invalid_frame[port]):
+                rx_errors = (new.rx_error[port] - old.rx_error[port])
+                invalid_frames = (new.invalid_frame[port] - old.invalid_frame[port])
+                event = rx_error_event(name,t, port, rx_errors, invalid_frames)
                 event_list.append(event)
             if new.lost_link[port] != old.lost_link[port]:
                 event = lost_link_event(name,t,port,(new.lost_link[port] - old.lost_link[port]))  
