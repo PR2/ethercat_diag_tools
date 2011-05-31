@@ -57,7 +57,7 @@ def undervoltage_lockout_event(name, t, desc):
 
 def rx_error_event(name, t, port, rx_errors, invalid_frames):
     """ Represents RX errors or invalid frames on specific port of an EtherCAT device"""
-    evt =  DiagEvent('RxError', name, t, '%d RX errors and %d invalid frames on port %d' % (rx_errors, port, invalid_frames))
+    evt =  DiagEvent('RxError', name, t, '%d RX errors and %d invalid frames on port %d' % (rx_errors, invalid_frames, port))
     evt.data = {'port' : port, 'rx_errors' : rx_errors, 'invalid_frames' : invalid_frames}
     return evt
 
