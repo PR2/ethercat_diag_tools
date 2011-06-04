@@ -129,27 +129,26 @@ def getNextPort(device, port_num):
     return (None, -1)
     
 
-def genPortOrder(device_map):
-    """Generates a orderred list of tuples (dev_name, device, port_num, port) that represents 
+def genPortOrder(unordered_devices):
+    """Generates a orderred list of tuples (devices, port_num, port) that represents 
     The order that a packet should travel through a list of devices.  
     The input to this function is a map of device name to devices
     """
 
-    if (len(device_map) == 0):
+    if (len(unordered_devices) == 0):
         return []
 
     # Make list of tuples (position,dev_name,device) that can be easily sorted by position
-    devices = [ (device.ring_position, dev_name, device) for dev_name,device in device_map.iteritems() ]    
+    devices = [ (dev.ring_position, dev) for dev in unordered_devices ]
     devices.sort()
     
     # first do quick check to make sure devices is ordered by position
-    for expected_position,(position,dev_name,device) in enumerate(devices):
+    for expected_position,(position, device) in enumerate(devices):
         if expected_position != position:
-            raise RuntimeError("Expected device %d to have position %d, not %d" % (dev_name, expected_position, position))
-        
-    # now put devices in reverse order
-    devices.reverse()
+            raise RuntimeError("Expected device %s to have position %d, not %d" % (device.name, expected_position, position))
     
+    devices.reverse()
+
     # make stack of stuff to look at
     # stack consists of tuple, ( (position, dev_name, dev), port_num )
     stack = [ (devices.pop(), 0) ]
@@ -157,8 +156,8 @@ def genPortOrder(device_map):
 
     while len(stack) > 0:
         dev_info, port_num = stack.pop()
-        (position, dev_name, device) = dev_info
-        result.append(  (dev_name, device, port_num, device.ports[port_num])  )
+        (position, device) = dev_info
+        result.append(  (device, port_num, device.ports[port_num])  )
         next_port,next_port_num = getNextPort(device, port_num)
         if next_port is not None:
             # first append next port of this device to stack

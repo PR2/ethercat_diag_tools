@@ -42,21 +42,17 @@ import roslib
 roslib.load_manifest(PKG)
 from ethercat_monitor.cell_data import CellData, cell_data_empty
 
-class EtherCATDevicePortStatus:
-    def __init__(self):
-        self.rx_errors = 0
-        self.forwarded_rx_errors = 0
-        self.frame_errors = 0
-        self.lost_links = 0
-        self.est_drops = 0.0
+class EtherCATDevicePort:
+    def __init__(self, msg):        
+        self.msg = msg  # should be EtherCATDevicePortStatus
 
-    def __str__(self):
-        result  = "   RX errors     : %d\n" % self.rx_errors
-        result += "   FWD RX errors : %d\n" % self.forwarded_rx_errors
-        result += "   Invalid Frame : %d\n" % self.frame_errors
-        result += "   Lost Links    : %d\n" % self.lost_links
-        result += "   Est drops     : %f\n" % self.est_drops
-        return result
+    #def __str__(self):
+    #    result  = "   RX errors     : %d\n" % self.rx_errors
+    #    result += "   FWD RX errors : %d\n" % self.forwarded_rx_errors
+    #    result += "   Invalid Frame : %d\n" % self.frame_errors
+    #    result += "   Lost Links    : %d\n" % self.lost_links
+    #    result += "   Est drops     : %f\n" % self.est_drops
+    #    return result
 
     def getDiff(self, port_old):
         """ Returns difference in error counters between this and old values"""
@@ -74,7 +70,7 @@ class EtherCATDevicePortStatus:
 
         return port_diff
 
-    def generateYaml(self):
+    def generateYaml(device_status):
         out = {}
         out['rx_errors'] = self.rx_errors
         out['forwarded_rx_errors'] = self.forwarded_rx_errors
@@ -84,14 +80,19 @@ class EtherCATDevicePortStatus:
         return out
 
 
+
+
 class EtherCATDevicePortMissing:
     """ Represets missing EtherCAT port data"""
     def __str__(self):
         return "   PORT MISSING"
 
-    def getDataGrid(self,port_num):
-        empty = cell_data_empty #CellData()
-        return [empty,empty,empty, CellData('Port%d'%port_num,CellData.ERROR),empty,empty,empty]
+
+class EtherCATDeviceMissing:
+    """ Represets missing EtherCAT device data"""
+    def __init__(name="NO DEVICE NAME"):
+        self.name = name
+
 
 
 class EtherCATDeviceStatus:
@@ -148,14 +149,3 @@ class EtherCATDeviceStatus:
 
         return out
 
-
-class EtherCATDeviceMissing:
-    """ Represents that absense of EtherCAT device that should be present. 
-    implements most of the same functions as EtherCATDeviceStatus
-    """
-    def __str__(self):
-        return "MISSING DEVICE"
-
-    def getDataGrid(self,name):
-        empty = cell_data_empty #CellData()
-        return [CellData(name, CellData.ERROR), empty, empty, empty, empty, empty, empty]

@@ -40,7 +40,7 @@
 import threading
 
 from diagnostic_msgs.msg import DiagnosticStatus, DiagnosticArray, KeyValue
-from ethercat_device_status import EtherCATDeviceMissing
+from ethercat_device_status import EtherCATDeviceMissing, EtherCATDevicePortMissing
 import rosbag
 import sys 
 import os
@@ -50,6 +50,74 @@ from ethercat_monitor.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDe
 from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
 
 from ethercat_monitor.util import prettyTimestamp, prettyDuration
+
+import ethercat_monitor.msg
+
+
+def mergeDevices(devices1, devices2):
+    """ creates a dict of device tuple based on the device name """
+    dev_map = {}
+    for dev in devices1:
+        if dev.name in dev_map:
+            raise Exception('Device with name %s in list twice' % dev.name)
+        else:
+            dev_map[dev.name] = [dev,None]
+        
+    for dev in devices2:
+        if dev.name in dev_map:
+            dev_pair = dev_map[dev.name]
+            if (dev_pair[1] != None):
+                raise Exception ('Device with name s% in list twice' % dev.name)
+            dev_pair[1] = dev
+        else:
+            dev_map[dev.name] = [None,dev]
+
+    return dev_map
+
+
+def getPortDiff(port_new, port_old):
+    """ Returns difference in error counters between this and old values"""
+    port_diff = ethercat_monitor.msg.EtherCATDevicePortStatus()
+    port_diff.rx_errors = port_new.rx_errors - port_old.rx_errors
+    port_diff.forwarded_rx_errors = port_new.forwarded_rx_errors - port_old.forwarded_rx_errors
+    port_diff.frame_errors = port_new.frame_errors - port_old.frame_errors
+    port_diff.lost_links = port_new.lost_links - port_old.lost_links
+    port_diff.est_drops = port_new.est_drops - port_old.est_drops
+
+    if port_new.open != port_old.open:
+        port_diff.open = None
+    else:
+        port_diff.open = port_new.open
+    return port_diff
+
+
+
+def getDeviceDiff(ds_new, ds_old):        
+    """ Gets (error) difference between new and old device """     
+    num_ports = max(len(ds_new.ports), len(ds_old.ports))
+    ds_diff = ethercat_monitor.msg.EtherCATDeviceStatus()
+    if ds_new.name != ds_old.name:
+        raise Exception("Name of old and new device does not match")
+    ds_diff.name = ds_new.name
+    ds_diff.epu_errors = ds_new.epu_errors - ds_old.epu_errors
+    ds_diff.pdi_errors = ds_new.pdi_errors - ds_old.pdi_errors
+    ds_diff.valid = ds_new.valid and ds_old.valid
+    if ds_new.hardware_id == ds_old.hardware_id:
+        ds_diff.hardware_id = ds_new.hardware_id
+    else:
+        ds_diff.hardware_id = "Mismatch %s != %s" % (ds_new.hardware_id, ds_old.hardware_id)
+    for num in range(num_ports):
+        if (num >= len(ds_new.ports)) or (num >= len(ds_old.ports)):
+            ds_diff.ports.append(EtherCATDevicePortMissing())
+        else:
+            ds_diff.ports.append(getPortDiff(ds_new.ports[num], ds_old.ports[num]))
+    if ds_new.ring_position != ds_old.ring_position:
+        ds_diff.ring_position = None
+    else:
+        ds_diff.ring_position = ds_new.ring_position
+    return ds_diff
+
+
 
 
 class DropEstimator:
@@ -76,28 +144,31 @@ class DropEstimator:
         # This is a little sloppy because sometimes packets are counted as
         # late before they are counted as dropped, however this situation is
         # not incredibly common 
-        dropped_new = tsd_new.master.dropped - tsd_new.master.late
-        dropped_old = tsd_old.master.dropped - tsd_old.master.late
-        drops = dropped_new - dropped_old        
+        new_master = tsd_new.getMaster()
+        old_master = tsd_old.getMaster()
+        dropped_new = new_master.dropped - new_master.late
+        dropped_old = old_master.dropped - old_master.late
+        drops = dropped_new - dropped_old
 
         # determine which device caused dropped packets, by looking for devices
         # where frame error count increased.  If multiple devices have frame errors
         # at same time, split dropped between devices based on how much frame error
         # increased for each device
-                       
+
         # Create list of port pairs between old and new data
         # port_pairs list is tupple of (device_name, port_number, port_new, port_old)
+        dev_map = mergeDevices(tsd_new.getDevices(), tsd_old.getDevices())
         port_pairs = []
-        for name,dev_new in tsd_new.devices.iteritems():
-            if name not in tsd_old.devices:
-                print "Warning found device %s in new data but not old data" % name
-            else:                
-                dev_old = tsd_old.devices[name]
+        for name, (dev_new, dev_old) in dev_map.iteritems():
+            if (dev_new is None) or (dev_old is None):
+                print "Warning, no device pair for device %s" % name
+            else:
                 if len(dev_old.ports) != len(dev_new.ports):
                     print "Number of ports do not match beween old (%d) an new (%d) devices" % (len(dev_old.ports), len(dev_new.ports))
                 else:
                     for port_num in range(len(dev_new.ports)):                        
                         port_pairs.append( (name, port_num, dev_new.ports[port_num], dev_old.ports[port_num]) )
+
 
         # sum new frame_errors for all devices
         frame_error_sum = 0.0  # should be float
@@ -114,7 +185,7 @@ class DropEstimator:
         device_drops = min(self.last_unassigned_drops, frame_error_sum)
         master_unassigned_drops = self.last_unassigned_drops - device_drops
         remaining_frame_error_sum  = frame_error_sum - device_drops
-        tsd_new.master.unassigned_drops = tsd_old.master.unassigned_drops + master_unassigned_drops
+        new_master.unassigned_drops = old_master.unassigned_drops + master_unassigned_drops
 
         # take remaining drop and assign them to frame errors from this cycle
         # any remaining drops get passed to next cycle
@@ -152,29 +223,30 @@ class EtherCATHistoryTimestepData:
     def __init__(self,timestamp):
         self.timestamp = timestamp
         self.timestamp_old = None
-        self.devices = {}
-        self.master = None
+        self.system = ethercat_monitor.msg.EtherCATSystemStatus()
+        self.has_master = False
 
-    def hasData(self):
-        if (len(self.devices) > 0) and (self.master is not None):
+    def hasData(self):        
+        if (len(self.system.devices) > 0) and self.has_master:
             return True
-        elif (len(self.devices) == 0) and (self.master is None):
+        elif (len(self.system.devices) == 0) and not self.has_master:
             return False
-        elif (len(self.devices) > 0) and (self.master is None):
-            raise RuntimeError("Device but no master")
+        elif (len(self.system.devices) > 0) and not self.has_master:
+            raise RuntimeError("Devices but no master")
         else:
             raise RuntimeError("Master but no devices")
 
     def numDevices(self):
-        return len(self.devices)
+        return len(self.system.devices)
 
-    def addDevice(self, name, device_status):
-        self.devices[name] = device_status
+    def addDevice(self, device_status):        
+        self.system.devices.append(device_status)        
 
     def addMaster(self, master):
-        if self.master is not None:
-            raise RuntimeError("Master data already set")
-        self.master = master
+        if self.has_master:
+            raise RuntimeError("Master data already set")        
+        self.system.master = master
+        self.has_master = True
 
     def __str__(self):
         result = time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(self.timestamp.to_sec())) + '\n'
@@ -183,9 +255,13 @@ class EtherCATHistoryTimestepData:
             result += " " + name + " : \n" + str(device)
         result += '--\n'
         return result
-    
-    def getMasterGrid(self):
-        return self.master.getDataGrid()
+
+
+    def getDevices(self):
+        return self.system.devices
+
+    def getMaster(self):
+        return self.system.master
 
 
     def getDiff(self, timestamp_data_old):
@@ -196,34 +272,44 @@ class EtherCATHistoryTimestepData:
         tsd_diff = EtherCATHistoryTimestepData(self.timestamp)
         tsd_diff.timestamp_old = tsd_old.timestamp
 
-        tsd_diff.master = self.master.getDiff(tsd_old.master)
+        tsd_diff.master = self.getMaster().getDiff(tsd_old.getMaster())
+
+        dev_map = mergeDevices(self.getDevices(), tsd_old.getDevices())
 
         #First match every device in this list to device in old data
-        for name,device_now in self.devices.iteritems():
-            if name in tsd_old.devices:
-                device_old = tsd_old.devices[name]
-                device_diff = device_now.getDiff(device_old)
-                tsd_diff.addDevice(name, device_diff)
-                # use device function to get difference
+        for name, (dev_new, dev_old) in dev_map.iteritems():
+            if (dev_new is None) or (dev_old is None):
+                print "Device '%s' not found" % name
+                tsd_diff.addDevice(EtherCATDeviceMissing(name))
             else:
-                #For any devices that are not in current data set, use special type
-                # to indicate the missmatch
-                print "Device '%s' not found in old data" % name
-                tsd_diff.addDevice(name, EtherCATDeviceMissing())
-
-        # Include any device in old timestamp that is not in new timestamp
-        for name in tsd_old.devices.iterkeys():
-            if name not in self.devices:
-                print "Device '%s' not found in new data" % name
-                tsd_diff.addDevice(name, EtherCATDeviceMissing())
+                dev_diff = getDeviceDiff(dev_new, dev_old)
+                tsd_diff.addDevice(dev_diff)
 
         return tsd_diff
 
-    def generateYaml(self):
-        # Order list of devices by position
-        
-        out = {}
-        
+
+
+    
+    def generateYaml(self):        
+        master = self.system.master
+        master_out = {'sent':master.sent, 'dropped':master.dropped, 'late':master.late}
+
+        devices_out = {}
+        for dev in self.system.devies:
+            dev_out = {'valid':dev.valid, 'position':dev.ring_position }
+            dev_out['epu_errors']=dev.epu_errors
+            dev_otu['pdi_errors']=dev.pdi_errors
+            for port in dev.ports:
+                port_out = {'rx_errors':port.rx_errors}
+                port_out['forwarded_rx_errors'] = port.forwarded_rx_errors
+                port_out['frame_errors'] = port.frame_errors
+                port_out['lost_links'] = port.lost_links
+            devices_out[dev.name] = dev_out
+        out['devices'] = devices_out
+
+        out['master':master_out, 'devices':devices_out]
+        out['devices'] = device_out
+
         if self.timestamp_old is not None:
             duration = self.timestamp - self.timestamp_old
             out['duration'] = prettyDuration(duration)
@@ -231,12 +317,7 @@ class EtherCATHistoryTimestepData:
             out['date'] = prettyTimestamp(self.timestamp)
             out['ros_time'] = {'secs':self.timestamp.secs, 'nsecs':self.timestamp.nsecs}
 
-        out['master'] = self.master.generateYaml()
-
-        device_out = {}
-        for name,device in self.devices.iteritems():
-            device_out[name] = device.generateYaml()
-        out['devices'] = device_out
+        
         return out
 
 
@@ -297,7 +378,7 @@ class EtherCATHistory:
         for status in msg.status:
             if status.name in self.device_diag_map:
                 dev_status = self.device_diag_map[status.name].process(status)
-                timestep_data.addDevice(status.name, dev_status)
+                timestep_data.addDevice(dev_status)
             elif status.name in self.other_diag_map:
                 pass # Ingore anything filed in other
             elif self.master_diag.isMatch(status):
@@ -305,7 +386,7 @@ class EtherCATHistory:
                 timestep_data.addMaster(master_status)
             elif self.device_add_diag.is_match(status):
                 dev_status = self.device_add_diag.process(status)
-                timestep_data.addDevice(status.name,dev_status)
+                timestep_data.addDevice(dev_status)
             else:
                 self.other_diag_map[status.name] = None
         if timestep_data.hasData():

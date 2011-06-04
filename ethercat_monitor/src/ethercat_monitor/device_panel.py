@@ -84,20 +84,20 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
 
     def genPacketOrderedList(self, tsd):
         """ Return list of (dev_name, device, port_num, port) tuples in that packet would go through devices"""
-        return genPortOrder(tsd.devices)
+        return genPortOrder(tsd.getDevices())
         
     def genPositionOrderedList(self, tsd):
         """ Return list of (dev_name, device, port_num, port) tuples ordered by device position """
         # Order list of devices by ring_position
         ordered_devices = []
-        for name,device in tsd.devices.iteritems():
-            ordered_devices.append( (device.ring_position, name, device) )
+        for device in tsd.getDevices():
+            ordered_devices.append( (device.ring_position, device) )
         ordered_devices.sort()
 
         result = []
-        for position,name,device in ordered_devices:
+        for position,device in ordered_devices:
             for num,port in enumerate(device.ports):                
-                result.append( (name,device, num, port) )
+                result.append( (device, num, port) )
 
         return result
 
@@ -118,7 +118,8 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
 
 
         last_dev_name = None
-        for name,device,num,port in port_list:
+        for device,num,port in port_list:
+
             row_data = [ cell_data_empty for unused in range(self.num_rows) ]            
             row_data[4] = CellData('Port%d'%num)
             row_data[5] = CellData(port.lost_links, ERROR if (port.lost_links != 0) else DATA)
@@ -133,15 +134,15 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
                 row_data[13] = CellData("Changed", ERROR)
             else:
                 row_data[13] = CellData(port.open, ERROR if ((num==0) and (not port.open)) else DATA)
-            if (last_dev_name is None) or (name != last_dev_name):
-                row_data[0]  = CellData(name, DATA if (device.valid) else ERROR)
+            if (last_dev_name is None) or (device.name != last_dev_name):
+                row_data[0]  = CellData(device.name, DATA if (device.valid) else ERROR)
                 row_data[1]  = CellData(device.hardware_id, DATA if (device.valid) else ERROR)
                 row_data[2]  = CellData(device.ring_position, ERROR if (device.ring_position is None) else DATA)
                 row_data[3]  = CellData(device.valid, DATA if (device.valid) else ERROR)            
                 row_data[11]  = CellData(device.epu_errors, ERROR if (device.epu_errors != 0) else DATA)
                 row_data[12] = CellData(device.pdi_errors, ERROR if (device.pdi_errors != 0) else DATA)
             data.append(row_data)
-            last_dev_name = name
+            last_dev_name = device.name
             
 
         # Re-adjust grid to have appropriate number of rows

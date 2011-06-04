@@ -349,7 +349,7 @@ class MainWindow(wx.Frame):
         WARN = CellData.WARN
         DATA = CellData.DATA
         empty = cell_data_empty #CellData()
-        master = tsd.master
+        master = tsd.getMaster()
         data = [empty for i in range(6)]
         sent = master.sent
         dropped = master.dropped
@@ -372,7 +372,7 @@ class MainWindow(wx.Frame):
                 elif (drops_per_hour > 1): level = WARN
                 else : level = DATA
                 data[4] = CellData("%.2f"%drops_per_hour, level)
-            unassigned_drops = tsd.master.unassigned_drops
+            unassigned_drops = master.unassigned_drops
             if unassigned_drops is None:
                 data[5] = CellData("?", WARN)
             else:

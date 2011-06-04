@@ -44,7 +44,8 @@ roslib.load_manifest(PKG)
 
 from ethercat_monitor.kv_convert import ConvertVar, ConvertList, KeyValueConvertList, VarStorage
 
-from ethercat_monitor.ethercat_device_status import EtherCATDeviceStatus, EtherCATDevicePortStatus
+#from ethercat_monitor.msg  import EtherCATDeviceStatus, EtherCATDevicePortStatus
+import ethercat_monitor.msg
 
 import re
 
@@ -53,15 +54,15 @@ def _strToBool(strval):
     """Returns true if string is "true", "True", "yes", "Yes", or "y" """
     return bool(_true_re.search(strval))
 
-
 def _port_open(strval):
     return bool(re.search("Open",strval))
 
 class EtherCATDeviceDiag:
     """ Looks for network errors in a specific EtherCAT Device """
-    def __init__(self, name, num_ports):
+    def __init__(self, name, hardware_id, num_ports):
         self.name = name
         self.num_ports = num_ports
+        self.hardware_id = hardware_id
         position_in_name = re.match("EtherCAT Device #(\d\d)",name)
         if position_in_name is None:
             self.ring_position = None
@@ -82,7 +83,6 @@ class EtherCATDeviceDiag:
             kvl.add('Status Port %d'%i, ConvertList('open', _port_open, i, False))
         self.kvl = kvl
 
-        
     def process(self, msg): 
         new = VarStorage()
         self.kvl.convert(msg, new)
@@ -97,19 +97,25 @@ class EtherCATDeviceDiag:
                 print "WARNING : changing ring position of device from %d to %d" % (self.ring_position, new.ring_position)
             self.ring_position = new.ring_position
 
-        device_status = EtherCATDeviceStatus(self.num_ports)
-        device_status.hardware_id = msg.hardware_id
+        if msg.hardware_id != self.hardware_id:
+            print "Warning hardware ID changed from %s to %s" % (self.hardware_id, msg.hardware_id)            
+            self.hardware_id = msg.hardware_id
+
+        device_status = ethercat_monitor.msg.EtherCATDeviceStatus()
+        device_status.name = self.name   # use reference to local diag name to save space
+        device_status.hardware_id = self.hardware_id  # use reference to local to save space
         device_status.epu_errors = new.epu_errors
         device_status.pdi_errors = new.pdi_errors
         device_status.ring_position = self.ring_position
         device_status.valid = new.valid
         for port_num in range(self.num_ports):                        
-            port = device_status.ports[port_num]
+            port = ethercat_monitor.msg.EtherCATDevicePortStatus()
             port.rx_errors = new.rx_errors[port_num]
             port.frame_errors = new.frame_errors[port_num]
             port.forwarded_rx_errors = new.forwarded_rx_errors[port_num]
             port.lost_links = new.lost_links[port_num]
             port.open = new.open[port_num]
+            device_status.ports.append(port)
         return device_status
 
 
@@ -145,7 +151,7 @@ class EtherCATDeviceAddDiag:
         else:
             print "Don't understand hardware_id = ", msg.hardware_id
 
-        dev = EtherCATDeviceDiag(name, num_ports)
+        dev = EtherCATDeviceDiag(name, msg.hardware_id, num_ports)
         self.diag_map[name] = dev
 
         return dev.process(msg)
