@@ -67,7 +67,7 @@ import wx.grid
 
 import yaml
 
-from ethercat_monitor.ethercat_history import EtherCATHistory
+from ethercat_monitor.ethercat_history import EtherCATHistory, EtherCATHistoryTimestepDataNote
 from ethercat_monitor.wx_util import levelToBackgroundColor
 from ethercat_monitor.util import prettyTimestamp, prettyDuration
 from ethercat_monitor.device_panel import DevicePanel
@@ -538,9 +538,13 @@ class MainWindow(wx.Frame):
         # set selection to relative when zero is pushed
         self.selectRelativeView()
         tsd = self.history.getNewestTimestepData()
-        self.tsd_old = tsd
         if tsd is not None:
-            self.history.noteTimestepData(tsd, "Zero")
+            self.tsd_old = tsd
+            note = EtherCATHistoryTimestepDataNote(tsd, "Zero pressed")
+            dlg = NoteEditDialog(self, note)
+            dlg.ShowModal()
+            dlg.Destroy()
+            self.history.addNote(note)            
 
 
     def OnChangeTopic(self, event):

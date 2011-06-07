@@ -395,8 +395,7 @@ class EtherCATHistory:
                 self.last_sample_time = timestep_data.timestamp
 
 
-    def noteTimestepData(self, timestamp_data, note_msg):
-        note = EtherCATHistoryTimestepDataNote(timestamp_data, note_msg)
+    def addNote(self, note):
         with self.lock:
             self.notes.append(note)
 
