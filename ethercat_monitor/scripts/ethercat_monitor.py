@@ -76,6 +76,7 @@ from ethercat_monitor.cell_data import CellData, cell_data_empty
 
 from ethercat_monitor.yaml_dialog import YamlDialog
 
+from ethercat_monitor.note_edit_dialog import NoteEditDialog
 
 def usage(progname):
     print __doc__ % vars()    
@@ -122,8 +123,8 @@ class TimestampSelect(wx.Panel):
         hsizer2.Add(self.time_raw_test_box, wx.EXPAND)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
-        vsizer.Add(hzizer1, wx.EXPAND)
-        vsizer.Add(hzizer2, wx.EXPAND)
+        vsizer.Add(hzizer1, 0, wx.EXPAND)
+        vsizer.Add(hzizer2, 0, wx.EXPAND)
 
 
     def update(self,time):
@@ -187,38 +188,40 @@ class TopicSelectDialog(wx.Dialog):
 
 
 
+
 class MainWindow(wx.Frame):
     def __init__(self, parent, id, title, history, topic_name):
         wx.Frame.__init__(self, parent, id, title)   
 
         self.history = history
+        self.notes = []
         self.tsd_old = None
         self.tsd_new = None
 
-        #for s in subassem_list:
-        ID_TOPIC=100
-        ID_EXIT=101
-
         # Setting up the menu.
         filemenu= wx.Menu()
-        filemenu.Append(ID_TOPIC, "Change &Topic"," Change diagnositic topic")
+        change_topic_menu_item = wx.MenuItem(filemenu, -1, text='Change &Topic', help='Change diagnostic topic')
+        self.Bind(wx.EVT_MENU, self.OnChangeTopic)
+        filemenu.AppendItem(change_topic_menu_item)
+
+        save_bag_menu_item = wx.MenuItem(filemenu, -1, text="&Save Bag File", help="Save EtherCAT data in bag file")
+        self.Bind(wx.EVT_MENU, self.onSaveBag, save_bag_menu_item)
+        filemenu.AppendItem(save_bag_menu_item)
+
         filemenu.AppendSeparator()
-        filemenu.Append(ID_EXIT,"E&xit"," Terminate the program")
+        
+        exit_menu_item = wx.MenuItem(filemenu, -1, text="E&xit", help="Terminate this program")
+        self.Bind(wx.EVT_MENU, self.onQuit, exit_menu_item)
         # Creating the menubar.
         menuBar = wx.MenuBar()
         menuBar.Append(filemenu,"&File") 
         self.SetMenuBar(menuBar)  
-                
-        wx.EVT_MENU(self, ID_TOPIC, self.OnChangeTopic)
-        wx.EVT_MENU(self, ID_EXIT, self.OnQuit)
  
         DEVICE_TABLE_ID   = 10
-        #ZERO_BUTTON_ID    = 11
 
         # zero button
         self.zero_button = wx.Button(self, -1, "Zero")
         self.Bind(wx.EVT_BUTTON, self.OnZero, self.zero_button)
-        #wx.EVT_BUTTON(self, ZERO_BUTTON_ID, self.OnZero)
 
         self.yaml_button = wx.Button(self, -1, "View Yaml")
         self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.yaml_button)
@@ -244,6 +247,17 @@ class MainWindow(wx.Frame):
         # Scroll window with device information arranged in grid
         self.device_panel = DevicePanel(self)
 
+        # Scolling text window with list of saved notes
+        self.note_listbox = wx.ListBox(self, style=wx.LB_SINGLE)
+        self.edit_note_button = wx.Button(self, -1, "Edit Note")
+        self.Bind(wx.EVT_BUTTON, self.onEditNote, self.edit_note_button)
+        self.set_old_button = wx.Button(self, -1, "Set Old")
+        self.set_old_button.SetToolTip(wx.ToolTip("Click to use current note selection as old timestep data"))
+        self.Bind(wx.EVT_BUTTON, self.onSetOld, self.set_old_button)
+        button_hsizer1 = wx.BoxSizer(wx.HORIZONTAL)
+        button_hsizer1.Add(self.edit_note_button,0)
+        button_hsizer1.Add(self.set_old_button,0)
+
         # Master grid
         master_grid = wx.grid.Grid(self)
         master_grid.CreateGrid(1,6)
@@ -266,6 +280,8 @@ class MainWindow(wx.Frame):
         vsizer0.Add(self.yaml_button, 0)
         vsizer0.Add(self.save_default_button, 0)
         vsizer0.Add(self.order_combo, 0)
+        vsizer0.Add(self.note_listbox, 1)
+        vsizer0.Add(button_hsizer1, 0)
 
         # Grid for displaying timestamps and duration of data
         # Name of diagnostics topic
@@ -294,7 +310,6 @@ class MainWindow(wx.Frame):
         hsizer.SetMinSize((1000,600))
         hsizer.Fit(self)
 
-
         # setup timer to update screen periodically
         self.timer = wx.Timer(self,-1)
         self.Bind(wx.EVT_TIMER, self.OnTimer, self.timer)
@@ -312,6 +327,8 @@ class MainWindow(wx.Frame):
         self.Show(True)        
 
     def update(self):
+        self.updateNoteList()
+
         self.tsd_new = self.history.getNewestTimestepData()
         if self.tsd_new is None:
             return 
@@ -335,6 +352,25 @@ class MainWindow(wx.Frame):
         self.updateMasterGrid(tsd)
         self.updateTimestampGrid(tsd)
 
+        self.Layout()
+
+    
+    def updateNoteList(self):
+        notes = self.history.getNotes()
+        # todo, don't update noteslist box if notes list has not changed
+        if True:
+            # keep track of selections so they can be re-selected after updating listbox
+            selections = self.note_listbox.GetSelections()
+            self.notes = notes
+            note_msgs = []
+            for note in notes:
+                time_str = prettyTimestamp(note.timestep_data.timestamp)
+                note_msgs.append("%s : %s" % (time_str, note.note_msg))
+            self.note_listbox.SetItems(note_msgs)
+            for index in selections:
+                if index < len(notes):
+                    self.note_listbox.Select(index)
+
 
     def changeTopic(self, topic_name):
         self.history.subscribeToDiagnostics(topic_name)
@@ -343,6 +379,34 @@ class MainWindow(wx.Frame):
         self.tsd_new = None
         self.tsd_old = None
         self.update()
+
+    def getSelectedNote(self):
+        index = self.note_listbox.GetSelection()
+        if index < 0:
+            self.displayError("Error", "No note selected to edit")
+            return None
+        return self.notes[index]        
+
+    def onEditNote(self, event):
+        note = self.getSelectedNote()
+        if note is None:
+            return
+        dlg = NoteEditDialog(self, note)
+        dlg.ShowModal()
+        dlg.Destroy()
+
+    def onSetOld(self, event):
+        note = self.getSelectedNote()
+        if note is None:
+            return
+        self.tsd_old = note.timestep_data
+        self.selectRelativeView()        
+
+    def selectRelativeView(self):
+        self.display_combo.SetSelection(1)  
+
+    def displayError(self, title, msg):
+        wx.MessageBox(msg, title, wx.OK|wx.ICON_ERROR, self)
 
     def updateMasterGrid(self, tsd):
         ERROR = CellData.ERROR
@@ -448,6 +512,13 @@ class MainWindow(wx.Frame):
         dlg.ShowModal()
         dlg.Destroy()    
 
+    def onSaveBag(self, event):
+        dlg = wx.FileDialog(self, "Select bag file to open", style=wx.FD_OPEN)
+        if dlg.ShowModal() == wx.ID_OK:        
+            bag_filename = os.path.join(dlg.GetDirectory(), dlg.GetFilename())
+            self.history.saveBag(bag_filename)
+            print "Saved bag file to ", bag_filename
+
     def updateTimestampGrid(self, tsd):
         grid = self.timestamp_grid
         grid.SetCellValue(0,0,prettyTimestamp(tsd.timestamp))
@@ -464,8 +535,12 @@ class MainWindow(wx.Frame):
         self.update()
 
     def OnZero(self, event):
-        self.display_combo.SetSelection(1)  # set selection to relative when zero is pushed
-        self.tsd_old = self.history.getNewestTimestepData()
+        # set selection to relative when zero is pushed
+        self.selectRelativeView()
+        tsd = self.history.getNewestTimestepData()
+        self.tsd_old = tsd
+        if tsd is not None:
+            self.history.noteTimestepData(tsd, "Zero")
 
 
     def OnChangeTopic(self, event):
@@ -482,7 +557,7 @@ class MainWindow(wx.Frame):
         dlg.Destroy()
 
 
-    def OnQuit(self, event):
+    def onQuit(self, event):
         self.Close(True)
 
 

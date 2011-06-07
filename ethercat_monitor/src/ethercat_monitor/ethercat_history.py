@@ -46,6 +46,7 @@ import sys
 import os
 import time
 import rospy
+import copy
 from ethercat_monitor.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDeviceAddDiag
 from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
 
@@ -118,6 +119,14 @@ def getDeviceDiff(ds_new, ds_old):
     return ds_diff
 
 
+def getMasterDiff(new, old):
+    """ Returns difference in counters between new and old master structures"""
+    diff = ethercat_monitor.msg.EtherCATMasterStatus()
+    diff.sent    = new.sent    - old.sent
+    diff.dropped = new.dropped - old.dropped
+    diff.late    = new.late    - old.late
+    diff.unassigned_drops = new.unassigned_drops - old.unassigned_drops
+    return diff
 
 
 class DropEstimator:
@@ -219,11 +228,15 @@ class DropEstimator:
         self.timestamp_data_old = tsd_new
 
 
+
+
 class EtherCATHistoryTimestepData:
-    def __init__(self,timestamp):
-        self.timestamp = timestamp
+    def __init__(self,msg_header):
+        self.timestamp = msg_header.stamp
+        self.msg_header = msg_header
         self.timestamp_old = None
         self.system = ethercat_monitor.msg.EtherCATSystemStatus()
+        self.system.header = msg_header
         self.has_master = False
 
     def hasData(self):        
@@ -269,10 +282,10 @@ class EtherCATHistoryTimestepData:
         between both timesteps"""
 
         tsd_old = timestamp_data_old
-        tsd_diff = EtherCATHistoryTimestepData(self.timestamp)
+        tsd_diff = EtherCATHistoryTimestepData(self.msg_header)
         tsd_diff.timestamp_old = tsd_old.timestamp
 
-        tsd_diff.master = self.getMaster().getDiff(tsd_old.getMaster())
+        tsd_diff.addMaster(getMasterDiff(self.getMaster(), tsd_old.getMaster()))
 
         dev_map = mergeDevices(self.getDevices(), tsd_old.getDevices())
 
@@ -322,6 +335,12 @@ class EtherCATHistoryTimestepData:
 
 
 
+class EtherCATHistoryTimestepDataNote:
+    """ Represents save timestamp data with message attached to it """
+    def __init__(self, timestep_data, note_msg):
+        self.timestep_data = timestep_data
+        self.note_msg = note_msg
+
 
 class EtherCATHistory:
     def __init__(self):
@@ -329,36 +348,70 @@ class EtherCATHistory:
         self.BEGIN = "BEGIN"
         self.lock = threading.Lock()
         self.subscription = None
-        self.reset()
+        self.reset()        
         self.drop_estimator = DropEstimator()
+        self.sample_interval = rospy.Duration(60)  # default to sampling data every 60 seconds
+        self.last_sample_time = None
 
     def reset(self):
         with self.lock:
+            # list of automatically saved ethercat timestep data.  
+            # New data is saved to history every minute.  
+            # history allows user to go back in time to view events that might have been missed
             self.history = []
+            # Notes are timestamp data that have been explicity saved by user
+            # the note part is a message that the user provides for the timestamp data
+            self.notes = []
+            self.newest_tsd = None
             self.other_diag_map = {}
             self.device_diag_map = {}
             self.master_diag     = EtherCATMasterDiag()
             self.device_add_diag = EtherCATDeviceAddDiag(self.device_diag_map)
             if self.subscription is not None:
                 self.subscription.unregister()
-                self.subscription = None
+                self.subscription = None                
 
     def addTimestepData(self, timestep_data):
         with self.lock:
-            if (len(self.history) > 0) and (timestep_data.timestamp < self.history[-1].timestamp):
-                raise RuntimeError("New data is older than previous data in history")
-            # if there is older data, use it to process timestep data
+            history = self.history
+            if (len(history) > 0) and (timestep_data.timestamp < history[-1].timestamp):
+                raise RuntimeError("New data is older than previous data in history")            
+            self.newest_tsd = timestep_data
             self.drop_estimator.process(timestep_data)
-            # For now just remember most recent data, instead of storing history.
-            #self.history.append(timestep_data)
-            self.history = [timestep_data]
+            # save sample timestep data every minute to history            
+            if self.last_sample_time is None:
+                # first sample
+                history.append(timestep_data)
+                self.notes.append(EtherCATHistoryTimestepDataNote(timestep_data, "First message"))
+                self.last_sample_time = timestep_data.timestamp + self.sample_interval
+                print "first sample"
+            elif (timestep_data.timestamp - self.last_sample_time) >= self.sample_interval:
+                history.append(timestep_data)                
+                self.last_sample_time += self.sample_interval
+                print "sample %d" % len(history)
+            
+            if (self.last_sample_time - timestep_data.timestamp) > self.sample_interval:
+                print "Warning, last_sample_time < current timestamp"
+                self.last_sample_time = timestep_data.timestamp
+
+
+    def noteTimestepData(self, timestamp_data, note_msg):
+        note = EtherCATHistoryTimestepDataNote(timestamp_data, note_msg)
+        with self.lock:
+            self.notes.append(note)
+
+    def getNotes(self):
+        # make shallow copy of notes list before returning them to user
+        with self.lock:
+            notes = copy.copy(self.notes)
+        return notes
 
     def getTimestepData(self, timestamp):
-        with self.lock:
+        with self.lock:            
             if len(history) == 0:
                 return None
             if (timestamp is self.END):
-                return self.history[-1]
+                return self.newest_tsd
             elif (timestamp is self.BEGIN):
                 return self.history[0]
             else:
@@ -373,8 +426,7 @@ class EtherCATHistory:
         """ Process message. Message contains array of data that may 
         include devices and master
         """
-        t = msg.header.stamp 
-        timestep_data = EtherCATHistoryTimestepData(t)
+        timestep_data = EtherCATHistoryTimestepData(msg.header)
         for status in msg.status:
             if status.name in self.device_diag_map:
                 dev_status = self.device_diag_map[status.name].process(status)
@@ -401,7 +453,7 @@ class EtherCATHistory:
 
     def getNewestTimestepData(self):
         with self.lock:
-            return self.history[-1] if (len(self.history) > 0) else None
+            return self.newest_tsd
 
     def processBagInternal(self, bag, diag_list, diag_map):
         t = None
@@ -426,6 +478,18 @@ class EtherCATHistory:
         # TODO : start separate thread to process bag
 
         self.process_bag_internal(bag,diag_list,diag_map)
+        
+
+    def saveBag(self, outbag_filename):
+        # make shallow copy of history, so it can continue to get new data while we saving current data
+        with self.lock:
+            history = copy.copy(self.history)
+
+        outbag = rosbag.Bag(outbag_filename, 'w', compression=rosbag.Compression.BZ2)
+        for tsd in history:
+            outbag.write('ethercat_system_status', tsd.system, t=tsd.system.header.stamp)
+        print "Saved %d messages to history" % len(history)
+        outbag.close()
         
 
     def printHistory(self):
