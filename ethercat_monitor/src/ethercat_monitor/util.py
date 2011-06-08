@@ -65,3 +65,24 @@ def prettyDuration(duration):
     else:
         result += "ago"
     return result
+
+
+def mergeDevices(devices1, devices2):
+    """ creates a dict of device tuple based on the device name """
+    dev_map = {}
+    for dev in devices1:
+        if dev.name in dev_map:
+            raise Exception('Device with name %s in list twice' % dev.name)
+        else:
+            dev_map[dev.name] = [dev,None]
+        
+    for dev in devices2:
+        if dev.name in dev_map:
+            dev_pair = dev_map[dev.name]
+            if (dev_pair[1] != None):
+                raise Exception ('Device with name s% in list twice' % dev.name)
+            dev_pair[1] = dev
+        else:
+            dev_map[dev.name] = [None,dev]
+
+    return dev_map

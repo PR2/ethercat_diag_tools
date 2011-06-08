@@ -42,7 +42,7 @@ import roslib
 roslib.load_manifest(PKG)
 
 from ethercat_monitor.kv_convert import ConvertVar, KeyValueConvertList, VarStorage
-from ethercat_monitor.ethercat_master_status import EtherCATMasterStatus
+import ethercat_monitor.msg
 
 class EtherCATMasterDiag:
     """ Looks at EtherCAT Master daignostics """
@@ -53,8 +53,7 @@ class EtherCATMasterDiag:
         kvl.add('RX Late Packet' , ConvertVar('late'   , int, 0))
         self.old = VarStorage()
         kvl.set_defaults(self.old)
-        self.kvl = kvl                        
-
+        self.kvl = kvl
 
     def isMatch(self, status):
         return (status.name == 'EtherCAT Master')
@@ -64,4 +63,4 @@ class EtherCATMasterDiag:
         new = VarStorage()
         kvl = self.kvl
         kvl.convert(msg, new)
-        return EtherCATMasterStatus(new.sent, new.dropped, new.late)
+        return ethercat_monitor.msg.EtherCATMasterStatus(new.sent, new.dropped, new.late, 0)

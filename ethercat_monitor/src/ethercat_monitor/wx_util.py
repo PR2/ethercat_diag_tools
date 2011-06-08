@@ -48,3 +48,10 @@ def levelToBackgroundColor(level):
         bg_color = wx.WHITE
     return bg_color    
 
+
+
+def displayErrorDialog(parent, message):
+    dlg = wx.MessageDialog(parent, message, caption="Error", style=(wx.OK | wx.CENTRE | wx.ICON_ERROR))
+    dlg.ShowModal()
+    dlg.Destroy()  
+
