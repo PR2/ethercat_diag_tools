@@ -1,3 +1,4 @@
+import os
 import wx
 import wx.grid
 
@@ -5,12 +6,10 @@ from ethercat_monitor.note_edit_dialog import NoteEditDialog
 from ethercat_monitor.wx_util import levelToBackgroundColor
 from ethercat_monitor.util import prettyTimestamp, prettyDuration
 from ethercat_monitor.device_panel import DevicePanel
-
 from ethercat_monitor.cell_data import CellData, cell_data_empty
-
 from ethercat_monitor.yaml_dialog import YamlDialog
-
 from ethercat_monitor.wx_util import displayErrorDialog
+from ethercat_monitor.timestep_data import EtherCATHistoryTimestepDataNote
 
 _yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
 
@@ -34,15 +33,23 @@ class EtherCATMonitorPanel(wx.Panel):
         self.tsd_old = None
         self.tsd_new = None
  
-        # zero button
+        # zero & note button
         self.zero_button = wx.Button(self, -1, "Zero")
-        self.Bind(wx.EVT_BUTTON, self.OnZero, self.zero_button)
+        self.Bind(wx.EVT_BUTTON, self.onZero, self.zero_button)
+        self.note_button = wx.Button(self, -1, "Note")
+        self.Bind(wx.EVT_BUTTON, self.onNote, self.note_button)
+        button_hsizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        button_hsizer2.Add(self.zero_button,0)
+        button_hsizer2.Add(self.note_button,0)
 
-        self.yaml_button = wx.Button(self, -1, "View Yaml")
-        self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.yaml_button)
-
-        self.save_default_button = wx.Button(self, -1, "Save Yaml")
-        self.Bind(wx.EVT_BUTTON, self.OnSaveDefault, self.save_default_button)
+        # Remove yaml stuff
+        #self.yaml_button = wx.Button(self, -1, "View Yaml")
+        #self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.view_yaml_button)
+        #self.save_default_button = wx.Button(self, -1, "Save Yaml")
+        #self.Bind(wx.EVT_BUTTON, self.OnSaveDefault, self.save_default_button)
+        #button_hsizer3 = wx.BoxSizer(wx.HORIZONTAL)
+        #button_hsizer3.Add(self.view_yaml_button,0)
+        #button_hsizer3.Add(self.save_yaml_button,0)
 
         # combo box allow choice between absolute and relative values
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
@@ -88,13 +95,11 @@ class EtherCATMonitorPanel(wx.Panel):
         vsizer0 = wx.BoxSizer(wx.VERTICAL)
         vsizer0.Add(self.topic_text,0,wx.EXPAND)
         vsizer0.Add(self.status_text,0,wx.EXPAND)
-        vsizer0.Add(self.zero_button, 0)
         vsizer0.Add(self.display_combo, 0)
-        vsizer0.Add(self.yaml_button, 0)
-        vsizer0.Add(self.save_default_button, 0)
         vsizer0.Add(self.order_combo, 0)
-        vsizer0.Add(self.note_listbox, 1)
+        vsizer0.Add(button_hsizer2, 0)
         vsizer0.Add(button_hsizer1, 0)
+        vsizer0.Add(self.note_listbox, 1)
 
         # Grid for displaying timestamps and duration of data
         # Name of diagnostics topic
@@ -166,7 +171,7 @@ class EtherCATMonitorPanel(wx.Panel):
             self.notes = notes
             note_msgs = []
             for note in notes:
-                time_str = prettyTimestamp(note.timestep_data.timestamp)
+                time_str = prettyTimestamp(note.timestep_data.getTimestamp())
                 note_msgs.append("%s : %s" % (time_str, note.note_msg))
             self.note_listbox.SetItems(note_msgs)
             for index in selections:
@@ -220,7 +225,7 @@ class EtherCATMonitorPanel(wx.Panel):
             data[3] = CellData("%.2f"%drops_per_billion_sends, level)
             if tsd.timestamp_old is not None:
                 secs_per_hour = 3600.
-                hours = (tsd.timestamp - tsd.timestamp_old).to_sec() / secs_per_hour
+                hours = (tsd.getTimestamp() - tsd.timestamp_old).to_sec() / secs_per_hour
                 drops_per_hour = dropped / hours
                 if (drops_per_hour > 10): level = ERROR
                 elif (drops_per_hour > 1): level = WARN
@@ -297,7 +302,7 @@ class EtherCATMonitorPanel(wx.Panel):
         dlg.ShowModal()
         dlg.Destroy()    
 
-    def onSaveBag(self, event):
+    def saveBag(self):
         dlg = wx.FileDialog(self, "Select bag file to open", style=wx.FD_OPEN)
         if dlg.ShowModal() == wx.ID_OK:        
             bag_filename = os.path.join(dlg.GetDirectory(), dlg.GetFilename())
@@ -306,23 +311,32 @@ class EtherCATMonitorPanel(wx.Panel):
 
     def updateTimestampGrid(self, tsd):
         grid = self.timestamp_grid
-        grid.SetCellValue(0,0,prettyTimestamp(tsd.timestamp))
+        grid.SetCellValue(0,0,prettyTimestamp(tsd.getTimestamp()))
         if tsd.timestamp_old is not None:
             grid.SetCellValue(0,1,prettyTimestamp(tsd.timestamp_old))
-            duration = tsd.timestamp - tsd.timestamp_old
+            duration = tsd.getTimestamp() - tsd.timestamp_old
             grid.SetCellValue(0,2,prettyDuration(duration))
         else:
             grid.SetCellValue(0,1,"")
             grid.SetCellValue(0,2,"")
         grid.AutoSize()
 
-    def OnZero(self, event):
+    def onZero(self, event):
         # set selection to relative when zero is pushed
         self.selectRelativeView()
         tsd = self.history.getNewestTimestepData()
         if tsd is not None:
             self.tsd_old = tsd
             note = EtherCATHistoryTimestepDataNote(tsd, "Zero pressed")
+            self.history.addNote(note)            
+
+    def onNote(self, event):
+        # set selection to relative when note is created
+        self.selectRelativeView()
+        tsd = self.history.getNewestTimestepData()
+        if tsd is not None:
+            self.tsd_old = tsd
+            note = EtherCATHistoryTimestepDataNote(tsd, "Type note here")
             dlg = NoteEditDialog(self, note)
             dlg.ShowModal()
             dlg.Destroy()

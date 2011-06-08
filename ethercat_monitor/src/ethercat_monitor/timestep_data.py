@@ -1,13 +1,70 @@
 
 import ethercat_monitor.msg
 
+from ethercat_monitor.util import mergeDevices
+
+def getPortDiff(port_new, port_old):
+    """ Returns difference in error counters between this and old values"""
+    port_diff = ethercat_monitor.msg.EtherCATDevicePortStatus()
+    port_diff.rx_errors = port_new.rx_errors - port_old.rx_errors
+    port_diff.forwarded_rx_errors = port_new.forwarded_rx_errors - port_old.forwarded_rx_errors
+    port_diff.frame_errors = port_new.frame_errors - port_old.frame_errors
+    port_diff.lost_links = port_new.lost_links - port_old.lost_links
+    port_diff.est_drops = port_new.est_drops - port_old.est_drops
+
+    if port_new.open != port_old.open:
+        port_diff.open = None
+    else:
+        port_diff.open = port_new.open
+    return port_diff
+
+
+
+def getDeviceDiff(ds_new, ds_old):        
+    """ Gets (error) difference between new and old device """     
+    num_ports = max(len(ds_new.ports), len(ds_old.ports))
+    ds_diff = ethercat_monitor.msg.EtherCATDeviceStatus()
+    if ds_new.name != ds_old.name:
+        raise Exception("Name of old and new device does not match")
+    ds_diff.name = ds_new.name
+    ds_diff.epu_errors = ds_new.epu_errors - ds_old.epu_errors
+    ds_diff.pdi_errors = ds_new.pdi_errors - ds_old.pdi_errors
+    ds_diff.valid = ds_new.valid and ds_old.valid
+    if ds_new.hardware_id == ds_old.hardware_id:
+        ds_diff.hardware_id = ds_new.hardware_id
+    else:
+        ds_diff.hardware_id = "Mismatch %s != %s" % (ds_new.hardware_id, ds_old.hardware_id)
+    for num in range(num_ports):
+        if (num >= len(ds_new.ports)) or (num >= len(ds_old.ports)):
+            ds_diff.ports.append(EtherCATDevicePortMissing())
+        else:
+            ds_diff.ports.append(getPortDiff(ds_new.ports[num], ds_old.ports[num]))
+    if ds_new.ring_position != ds_old.ring_position:
+        ds_diff.ring_position = None
+    else:
+        ds_diff.ring_position = ds_new.ring_position
+    return ds_diff
+
+
+def getMasterDiff(new, old):
+    """ Returns difference in counters between new and old master structures"""
+    diff = ethercat_monitor.msg.EtherCATMasterStatus()
+    diff.sent    = new.sent    - old.sent
+    diff.dropped = new.dropped - old.dropped
+    diff.late    = new.late    - old.late
+    diff.unassigned_drops = new.unassigned_drops - old.unassigned_drops
+    return diff
+
+
 
 class EtherCATHistoryTimestepData:
     def __init__(self,system):
         self.system = system
-        self.timestamp = system.header.stamp
         self.timestamp_old = None
 
+    def getTimestamp(self):
+        return self.system.header.stamp
+        
     def hasData(self):        
         if (len(self.system.devices) > 0) and self.has_master:
             return True
@@ -25,13 +82,10 @@ class EtherCATHistoryTimestepData:
         self.system.devices.append(device_status)        
 
     def addMaster(self, master):
-        if self.has_master:
-            raise RuntimeError("Master data already set")        
         self.system.master = master
-        self.has_master = True
 
     def __str__(self):
-        result = time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(self.timestamp.to_sec())) + '\n'
+        result = time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(self.getTimestamp().to_sec())) + '\n'
         result += "Master\n" + str(self.master)
         for name,device in self.devices.iteritems():
             result += " " + name + " : \n" + str(device)
@@ -48,12 +102,14 @@ class EtherCATHistoryTimestepData:
         """ returns new EthercatHistoryTimestampData that represents difference
         between this timestamp and older timestamp"""
 
+        sys_status = ethercat_monitor.msg.EtherCATSystemStatus()
+        sys_status.header = self.system.header
+        tsd_diff = EtherCATHistoryTimestepData(sys_status)
+
         tsd_old = timestamp_data_old
-        tsd_diff = EtherCATHistoryTimestepData(self.system)
-        tsd_diff.timestamp_old = tsd_old.timestamp
+        tsd_diff.timestamp_old = tsd_old.getTimestamp()
 
         tsd_diff.addMaster(getMasterDiff(self.getMaster(), tsd_old.getMaster()))
-
         dev_map = mergeDevices(self.getDevices(), tsd_old.getDevices())
 
         #First match every device in this list to device in old data
@@ -88,13 +144,14 @@ class EtherCATHistoryTimestepData:
 
         out['master':master_out, 'devices':devices_out]
         out['devices'] = device_out
-
+        
+        timestamp = self.getTimestamp()
         if self.timestamp_old is not None:
-            duration = self.timestamp - self.timestamp_old
+            duration = timestamp - self.timestamp_old
             out['duration'] = prettyDuration(duration)
         else:
-            out['date'] = prettyTimestamp(self.timestamp)
-            out['ros_time'] = {'secs':self.timestamp.secs, 'nsecs':self.timestamp.nsecs}
+            out['date'] = prettyTimestamp(timestamp)
+            out['ros_time'] = {'secs':timestamp.secs, 'nsecs':timestamp.nsecs}
 
         return out
 

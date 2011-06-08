@@ -63,61 +63,6 @@ import ethercat_monitor.timestep_data
 import std_msgs.msg
 
 
-def getPortDiff(port_new, port_old):
-    """ Returns difference in error counters between this and old values"""
-    port_diff = ethercat_monitor.msg.EtherCATDevicePortStatus()
-    port_diff.rx_errors = port_new.rx_errors - port_old.rx_errors
-    port_diff.forwarded_rx_errors = port_new.forwarded_rx_errors - port_old.forwarded_rx_errors
-    port_diff.frame_errors = port_new.frame_errors - port_old.frame_errors
-    port_diff.lost_links = port_new.lost_links - port_old.lost_links
-    port_diff.est_drops = port_new.est_drops - port_old.est_drops
-
-    if port_new.open != port_old.open:
-        port_diff.open = None
-    else:
-        port_diff.open = port_new.open
-    return port_diff
-
-
-
-def getDeviceDiff(ds_new, ds_old):        
-    """ Gets (error) difference between new and old device """     
-    num_ports = max(len(ds_new.ports), len(ds_old.ports))
-    ds_diff = ethercat_monitor.msg.EtherCATDeviceStatus()
-    if ds_new.name != ds_old.name:
-        raise Exception("Name of old and new device does not match")
-    ds_diff.name = ds_new.name
-    ds_diff.epu_errors = ds_new.epu_errors - ds_old.epu_errors
-    ds_diff.pdi_errors = ds_new.pdi_errors - ds_old.pdi_errors
-    ds_diff.valid = ds_new.valid and ds_old.valid
-    if ds_new.hardware_id == ds_old.hardware_id:
-        ds_diff.hardware_id = ds_new.hardware_id
-    else:
-        ds_diff.hardware_id = "Mismatch %s != %s" % (ds_new.hardware_id, ds_old.hardware_id)
-    for num in range(num_ports):
-        if (num >= len(ds_new.ports)) or (num >= len(ds_old.ports)):
-            ds_diff.ports.append(EtherCATDevicePortMissing())
-        else:
-            ds_diff.ports.append(getPortDiff(ds_new.ports[num], ds_old.ports[num]))
-    if ds_new.ring_position != ds_old.ring_position:
-        ds_diff.ring_position = None
-    else:
-        ds_diff.ring_position = ds_new.ring_position
-    return ds_diff
-
-
-def getMasterDiff(new, old):
-    """ Returns difference in counters between new and old master structures"""
-    diff = ethercat_monitor.msg.EtherCATMasterStatus()
-    diff.sent    = new.sent    - old.sent
-    diff.dropped = new.dropped - old.dropped
-    diff.late    = new.late    - old.late
-    diff.unassigned_drops = new.unassigned_drops - old.unassigned_drops
-    return diff
-
-
-
-
 
 
 
@@ -193,6 +138,7 @@ class EtherCATHistory:
         if self.bag_filename is not None:
             self.processBag(bag_filename)
         elif self.topic_name is not None:
+            self.diag_processor = EtherCATDiagnosticProcessor()
             if subscription is not None:
                 self.subscription = subscription
             else:
@@ -229,11 +175,10 @@ class EtherCATHistory:
         """
         result = self.connection.recv()
         while result is not None:
-            (status_msg, data_list) = result
-            tsd_list = [EtherCATHistoryTimestepData(s) for s in data_list]
+            (status_msg, system_msg_list) = result
             with self.lock:
                 self.loading_bag_status = status_msg
-                self.addTimestepDataList(tsd_list)
+                self.addEtherCATSystemMsgs(system_msg_list)
             result = self.connection.recv()
         print "subprocess is complete"
         self.subproc.join()
@@ -241,13 +186,20 @@ class EtherCATHistory:
 
            
     def diagnosticsCallback(self, msg):
-        pass
- 
+        system_msg = self.diag_processor.processDiagnosticMsg(msg)
+        if system_msg is not None:
+            with self.lock:
+                self.loading_bag_status = "Recieving messages"
+                self.addEtherCATSystemMsgs([system_msg])
 
-    def addTimestepDataList(self, timestep_data_list):
-        for timestep_data in timestep_data_list:
+
+    def addEtherCATSystemMsgs(self, system_msgs_list):    
+        for system_msg in system_msgs_list:
+            # first wrap EtherCATSytemStatus message in timestep_data structure.
+            timestep_data = EtherCATHistoryTimestepData(system_msg)
+            # now mak
             history = self.history
-            if (len(history) > 0) and (timestep_data.timestamp < history[-1].timestamp):
+            if (len(history) > 0) and (timestep_data.getTimestamp() < history[-1].getTimestamp()):
                 raise RuntimeError("New data is older than previous data in history")            
             self.drop_estimator.process(timestep_data)
             self.newest_tsd = timestep_data
@@ -256,14 +208,13 @@ class EtherCATHistory:
                 # first sample
                 history.append(timestep_data)
                 self.notes.append(EtherCATHistoryTimestepDataNote(timestep_data, "First message"))
-                self.last_sample_time = timestep_data.timestamp + self.sample_interval
-            elif (timestep_data.timestamp - self.last_sample_time) >= self.sample_interval:
+                self.last_sample_time = timestep_data.getTimestamp() + self.sample_interval
+            elif (timestep_data.getTimestamp() - self.last_sample_time) >= self.sample_interval:
                 history.append(timestep_data)                
                 self.last_sample_time += self.sample_interval
-
-            if (self.last_sample_time - timestep_data.timestamp) > self.sample_interval:
+            if (self.last_sample_time - timestep_data.getTimestamp()) > self.sample_interval:
                 print "Warning, last_sample_time < current timestamp"
-                self.last_sample_time = timestep_data.timestamp
+                self.last_sample_time = timestep_data.getTimestamp()
 
 
     def addNote(self, note):
@@ -294,68 +245,13 @@ class EtherCATHistory:
     def getNewestTimestepData(self):
         with self.lock:
             return self.newest_tsd
-
-    
-    def processBagInternal(self, bag_filename):
-        try:
-            if not os.path.isfile(bag_filename): 
-                raise RuntimeError("Cannot locate input bag file %s" % bag_filename)
-
-            bag = rosbag.Bag(bag_filename)
-
-            # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
-            y = yaml.load(bag._get_yaml_info())
-            matching_topics = [ ]
-            for topic_info in y['topics']:
-                if topic_info['type'] == 'diagnostic_msgs/DiagnosticArray':
-                    topic_name = topic_info['topic']
-                    num_msgs = int(topic_info['messages'])
-                    matching_topics.append( (topic_name, num_msgs) )
-
-            if len(matching_topics) == 0:            
-                raise RuntimeError("No diagnostic data in bag file")
-            elif len(matching_topics) > 1:
-                # todo, fix to support multiple topics from bag file
-                raise RuntimeError("Multiple matching topics in bag file")
-
-            topic_name, total_msgs = matching_topics[0]
-
-            diag_processor = EtherCATDiagnosticProcessor()
-
-            last_topic = None
-            msg_count = 0
-            tsd_queue = []
-            sleep_count = 0
-            for topic, msg, unused in bag.read_messages(topics=[topic_name]):
-                # todo, instead looking for messages in just diagnostics topic, 
-                # look through all messages, and just do type checking on each message before processing it
-                if (last_topic is not None) and (topic != last_topic):
-                    raise RuntimeError("Error multiple topics with diagnostics %s and %s" % (topic, last_topic))
-                tsd = diag_processor.processDiagnosticsMsg(msg)
-                if tsd is not None:
-                    tsd_queue.append(tsd)
-                msg_count += 1
-                time.sleep(0.1)
-                with self.lock:
-                    self.addTimestepDataList(tsd_queue)
-                    self.loading_bag_status = "Processed %d of %d messages" % (msg_count, total_msgs)
-                    tsd_queue = []
-
-            with self.lock:            
-                self.addTimestepDataList(tsd_queue)
-                self.loading_bag_status = "Loading complete"
-
-        except Exception, e:
-            print e
-            with self.lock:
-                self.loading_bag_status = 'ERROR : ' + str(e)
         
 
     def processBag(self, bag_filename):
         """ 
         Opens and starts processing of <bag_filename>.  
         To avoid blocking for a long time or blogging down GUI (because of GIL) 
-        actual bagfile processing in another process.        
+        the major part of bagfile processing is done in another process.
         """
         self.loading_bag_status = "Starting loader thread..."
         self.connection, subproc_connection = multiprocessing.Pipe()
@@ -366,9 +262,6 @@ class EtherCATHistory:
         # use thread to get data from bag file and put it in history structure
         self.thread = threading.Thread(target=self.updateSubProc, name='process_thread')
         self.thread.start()
-
-        #self.thread = threading.Thread(target=self.processBagInternal, name='process_thread', args=(bag_filename,))
-        #self.thread.start()
 
 
     def saveBag(self, outbag_filename):
@@ -429,7 +322,7 @@ def processBagSubProc(bag_filename, connection):
             if data is not None:
                 data_queue.append(data)
             msg_count += 1
-            if len(data_queue) >= 10:
+            if len(data_queue) >= 10:  # put messages in queue 10 at a time
                 status_msg = "Processed %d of %d messages" % (msg_count, total_msgs)
                 connection.send( (status_msg, data_queue) ) 
                 data_queue = []

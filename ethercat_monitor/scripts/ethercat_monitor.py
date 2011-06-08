@@ -207,10 +207,22 @@ class MainWindow(wx.Frame):
         self.Show(True)
 
 
-    def update(self):
+    def addPanel(self, history):
+        panel = EtherCATMonitorPanel(self.notebook, history)
+        self.panels.append(panel)
+        self.notebook.AddPage(panel, panel.getTitle())
+
+    def getCurrentPanel(self):
         index = self.notebook.GetSelection()
         if index >= 0:
-            self.panels[index].update()
+            return self.panels[index]
+        else:
+            return None
+            
+    def update(self):
+        panel = self.getCurrentPanel()
+        if panel is not None:
+            panel.update()
         self.Layout()
 
     def onNewTopic(self, topic_name):
@@ -234,11 +246,11 @@ class MainWindow(wx.Frame):
         self.update()
 
     def onSaveBag(self, event):
-        dlg = wx.FileDialog(self, "Select filename to save", style=wx.FD_OPEN)
-        if dlg.ShowModal() == wx.ID_OK:        
-            bag_filename = os.path.join(dlg.GetDirectory(), dlg.GetFilename())
-            self.history.saveBag(bag_filename)
-            print "Saved bag file to ", bag_filename
+        panel = self.getCurrentPanel()
+        if panel is not None:
+            panel.saveBag()
+        else:
+            displayErrorDialog("No tab is selected")
 
     def onLoadBag(self, event):
         dlg = wx.FileDialog(self, "Select bag file to load", style=wx.FD_OPEN)
@@ -252,10 +264,6 @@ class MainWindow(wx.Frame):
                 self.addPanel(history)
                 "print adding panel"
         
-    def addPanel(self, history):
-        panel = EtherCATMonitorPanel(self.notebook, history)
-        self.panels.append(panel)
-        self.notebook.AddPage(panel, panel.getTitle())
             
     def onTimer(self, event):
         self.update()
