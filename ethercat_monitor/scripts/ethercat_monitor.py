@@ -68,9 +68,8 @@ import wx.grid
 import yaml
 
 from ethercat_monitor.timestep_data import EtherCATHistoryTimestepDataNote
-from ethercat_monitor.ethercat_history import EtherCATHistory
-
-from ethercat_monitor.ethercat_monitor_panel import EtherCATMonitorPanel
+from ethercat_monitor.ethercat_history import EtherCATSubscriber, EtherCATBagReader
+from ethercat_monitor.ethercat_monitor_panel import EtherCATMonitorReaderPanel
 
 from ethercat_monitor.wx_util import displayErrorDialog
 
@@ -167,14 +166,16 @@ class TopicSelectDialog(wx.Dialog):
 
 
 class MainWindow(wx.Frame):
-    def __init__(self, history):
+    def __init__(self, reader):
         wx.Frame.__init__(self, None, -1, "EtherCAT Monitor")
 
         self.notebook = wx.Notebook(self)
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+        vsizer.Add(self.notebook,1,wx.EXPAND)
 
         self.panels = []
 
-        self.addPanel(history)
+        self.addPanel(reader)
 
         # Setting up the menu.
         filemenu= wx.Menu()
@@ -202,15 +203,19 @@ class MainWindow(wx.Frame):
         # setup timer to update screen periodically
         self.timer = wx.Timer(self,-1)
         self.Bind(wx.EVT_TIMER, self.onTimer, self.timer)
-        self.timer.Start(800)
+        self.timer.Start(500)
+
+        self.SetSizer(vsizer)
+        self.SetAutoLayout(1)
+        vsizer.Fit(self)
 
         self.Show(True)
 
 
-    def addPanel(self, history):
-        panel = EtherCATMonitorPanel(self.notebook, history)
-        self.panels.append(panel)
-        self.notebook.AddPage(panel, panel.getTitle())
+    def addPanel(self, reader):
+        panel = EtherCATMonitorReaderPanel(self.notebook, reader)
+        self.panels.append(panel)        
+        self.notebook.AddPage(panel, reader.getTitle())
 
     def getCurrentPanel(self):
         index = self.notebook.GetSelection()
@@ -229,11 +234,12 @@ class MainWindow(wx.Frame):
         dlg = TopicSelectDialog(None)
         dlg.ShowModal()
         if dlg.selected_topic is not None:
-            print "Select topic '%s'" % dlg.selected_topic
-            if self.current_topic == dlg.selected_topic:        
-                print "New topic name is same as previous topic"
-            else:
-                self.changeTopic(dlg.selected_topic)
+            for panel in self.panels:
+                if panel.getReader().getTopic() == dlg.selected_topic:
+                    errorDialog("Topic '%s' alread has a connection")
+                    return
+            reader = EtherCATSubscriber('/diagnostics')
+            self.addPanel(reader)
         else:
             print "Cancel"
         dlg.Destroy()
@@ -259,15 +265,14 @@ class MainWindow(wx.Frame):
             if not os.path.isfile(bag_filename): 
                 displayErrorDialog(self, "'%s' is not a file" % bag_filename)
             else:
-                history = EtherCATHistory(bag_filename=bag_filename)
-                "print history created"
-                self.addPanel(history)
+                reader = EtherCATBagReader(bag_filename)
+                "print bag reader created"
+                self.addPanel(reader)
                 "print adding panel"
         
             
     def onTimer(self, event):
         self.update()
-
 
     def onQuit(self, event):
         self.Close(True)
@@ -291,24 +296,12 @@ def main(argv):
     
     if len(argv) == 1:
         bag_filename = argv[0]
-        history = EtherCATHistory(bag_filename=bag_filename)
+        reader = EtherCATBagReader(bag_filename)
     else:
-        history = EtherCATHistory(topic_name='/diagnostics')
-
-    try:
-        pass
-    except KeyboardInterrupt:
-        print "Keyboard Interrupt, quiting"
-    except Exception,e:
-        print "Error annotating bag %s : %s" % (inbag_filename, str(e))
-
-    #print len(history.history)
-    #history.printHistory()
-    #tsd = history.getTimestepData(history.END)
-    #print tsd.getDataGrid()
+        reader = EtherCATSubscriber('/diagnostics')
 
     app = wx.PySimpleApp()
-    MainWindow(history)
+    MainWindow(reader)
     app.MainLoop()
 
     return 0

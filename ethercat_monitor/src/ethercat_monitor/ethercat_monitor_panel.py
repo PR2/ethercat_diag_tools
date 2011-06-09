@@ -24,7 +24,62 @@ _yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
 #  Sent Dropped  Late 
 
 
-class EtherCATMonitorPanel(wx.Panel):
+class EtherCATMonitorReaderPanel(wx.Panel):
+    def __init__(self, parent, reader):
+        wx.Panel.__init__(self, parent, -1, name=reader.getTitle())
+        # Name of diagnostics topic
+        self.source_text = wx.TextCtrl(self, -1, reader.getSourceDesc() , style = wx.TE_READONLY)
+        self.panels = []
+        self.reader = reader
+        self.history_list = []
+        self.notebook = wx.Notebook(self)
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+        vsizer.Add(self.source_text,0,wx.EXPAND)
+        vsizer.Add(self.notebook,1,wx.EXPAND)
+        self.updateHistoryPanels()            
+        self.SetSizer(vsizer)
+        self.SetAutoLayout(1)
+        vsizer.Fit(self)
+
+    def getReader(self):
+        return self.reader
+
+    def updateHistoryPanels(self):
+        # if there are new history elements available, add a new panel
+        for history in self.reader.getHistoryList():
+            if history not in self.history_list:
+                self.addPanel(history)
+
+    def update(self):
+        self.updateHistoryPanels()
+        # update currently viewer panel
+        panel = self.getCurrentPanel()
+        if panel is not None:
+            panel.update()
+
+    def saveBag(self):
+        panel = getCurrentPanel(self)
+        if panel is not None:
+            panel.saveBag()
+        else:
+            displayErrorDialog(self, "No history panel selected")
+
+    def addPanel(self, history):
+        panel = EtherCATMonitorHistoryPanel(self.notebook, history)
+        self.history_list.append(history)
+        self.panels.append(panel)        
+        self.notebook.AddPage(panel, history.getTitle())
+
+    def getCurrentPanel(self):
+        index = self.notebook.GetSelection()
+        if index >= 0:
+            return self.panels[index]
+        else:
+            return None
+
+
+
+class EtherCATMonitorHistoryPanel(wx.Panel):
     def __init__(self, parent, history):
         wx.Panel.__init__(self, parent, -1, name=history.getTitle())
 
@@ -42,15 +97,6 @@ class EtherCATMonitorPanel(wx.Panel):
         button_hsizer2.Add(self.zero_button,0)
         button_hsizer2.Add(self.note_button,0)
 
-        # Remove yaml stuff
-        #self.yaml_button = wx.Button(self, -1, "View Yaml")
-        #self.Bind(wx.EVT_BUTTON, self.OnGenerateYaml, self.view_yaml_button)
-        #self.save_default_button = wx.Button(self, -1, "Save Yaml")
-        #self.Bind(wx.EVT_BUTTON, self.OnSaveDefault, self.save_default_button)
-        #button_hsizer3 = wx.BoxSizer(wx.HORIZONTAL)
-        #button_hsizer3.Add(self.view_yaml_button,0)
-        #button_hsizer3.Add(self.save_yaml_button,0)
-
         # combo box allow choice between absolute and relative values
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
         self.display_combo.SetSelection(0)  # set selection to absolute on startup
@@ -59,8 +105,6 @@ class EtherCATMonitorPanel(wx.Panel):
         self.order_combo = wx.ComboBox(self, -1, choices=['Position Order', 'Packet Order'], style=wx.CB_READONLY)
         self.order_combo.SetSelection(0)  # set selection to absolute on startup
 
-        # Name of diagnostics topic
-        self.topic_text = wx.TextCtrl(self, -1, "", style = wx.TE_READONLY)
         # Name of diagnostics topic
         self.status_text = wx.TextCtrl(self, -1, "", style = wx.TE_READONLY)
 
@@ -93,7 +137,6 @@ class EtherCATMonitorPanel(wx.Panel):
 
         # control panel
         vsizer0 = wx.BoxSizer(wx.VERTICAL)
-        vsizer0.Add(self.topic_text,0,wx.EXPAND)
         vsizer0.Add(self.status_text,0,wx.EXPAND)
         vsizer0.Add(self.display_combo, 0)
         vsizer0.Add(self.order_combo, 0)
@@ -118,7 +161,7 @@ class EtherCATMonitorPanel(wx.Panel):
         vsizer1.Add(self.master_grid, 0, wx.EXPAND)
         vsizer1.Add(self.device_panel, 1, wx.EXPAND)
 
-        # Entire app
+        # Entire panel
         hsizer = wx.BoxSizer(wx.HORIZONTAL)
         hsizer.Add(vsizer0, 0, wx.EXPAND)
         hsizer.Add(vsizer1, 4, wx.EXPAND)
@@ -129,6 +172,7 @@ class EtherCATMonitorPanel(wx.Panel):
         hsizer.Fit(self)
 
         self.Show(True)        
+
 
     def update(self):
         self.updateNoteList()
@@ -157,10 +201,8 @@ class EtherCATMonitorPanel(wx.Panel):
         self.device_panel.updateDeviceGrid(tsd, device_grid_mode)
         self.updateMasterGrid(tsd)
         self.updateTimestampGrid(tsd)
+        self.Layout()
 
-
-    def getTitle(self):
-        return self.history.getTitle()
     
     def updateNoteList(self):
         notes = self.history.getNotes()
@@ -245,62 +287,6 @@ class EtherCATMonitorPanel(wx.Panel):
             grid.SetReadOnly( 0, col );
         grid.AutoSize()
 
-    def genYaml(self):
-        self.tsd_new = self.history.getNewestTimestepData()
-        if self.tsd_new is None:
-            return None
-        if self.tsd_old is None:
-            self.tsd_old = self.tsd_new
-
-        tsd_new  = self.tsd_new
-        tsd_old  = self.tsd_old
-        tsd_diff = self.tsd_new.getDiff(self.tsd_old)
-        
-        out = {}
-        out['new'] = tsd_new.generateYaml()
-        out['old'] = tsd_old.generateYaml()
-        out['diff'] = tsd_diff.generateYaml()
-        return yaml.dump(out)
-    
-
-    def OnGenerateYaml(self, event):
-        out = self.genYaml();
-        dlg = YamlDialog(self, out)
-        dlg.ShowModal()
-        dlg.Destroy()        
-        
-    def OnSaveDefault(self, event):    
-        """ Save yaml output in prefined location based on data and part #"""        
-        out = self.genYaml();
-        if out is None:
-            displayErrorDialog(self, "Nothing to save")            
-            return
-
-        partnum = wx.GetTextFromUser('Please scan barcode for part', 'Scan Part Barcode')
-        if len(partnum) == 0:
-            displayErrorDialog(self, "No part number.  File not saved")
-            return
-
-        timestr = time.strftime("%a_%b_%d_%I:%M_%p", time.localtime())
-        dirpath = os.path.join(_yaml_output_directory, partnum)
-        fn = os.path.join(dirpath, timestr+'.yaml')
-
-        # use use data as part of filename 
-        try:
-            if not os.path.isdir(dirpath):
-                os.makedirs(dirpath,0777)
-            f = open(fn, 'w', 0777)
-            f.write(out) 
-            f.close()
-        except Exception, e:
-            print "Error saving Yaml :", e
-            displayErrorDialog(self, "Error saving Yaml : " + str(e))
-            return
-
-        dlg = wx.MessageDialog(self, ("Yaml File Saved to %s"%fn), \
-                                   caption="Info", style=(wx.OK | wx.CENTRE | wx.ICON_INFORMATION))
-        dlg.ShowModal()
-        dlg.Destroy()    
 
     def saveBag(self):
         dlg = wx.FileDialog(self, "Select bag file to open", style=wx.FD_OPEN)
