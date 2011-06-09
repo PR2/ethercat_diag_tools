@@ -76,14 +76,14 @@ from ethercat_monitor.wx_util import displayErrorDialog
 def usage(progname):
     print __doc__ % vars()    
 
-
 # TODO :
+#  Way to select/create notes from history
+#  Better way of chosing events from notes or history
+#  Better way of displaying old/new timestamp data in history
+#  Highlighting color for status (Error Warn)
+#  Method of saving/loading both notes and history from bag file
 #  Unit tests
-
-# TODO (later):
-#  Way to prune history,
-#  Faster way to search history
-
+#  Way to create plot of dropped/late packets
 
 class TimestampSelect(wx.Panel):
     def __init__(self,parent,name):

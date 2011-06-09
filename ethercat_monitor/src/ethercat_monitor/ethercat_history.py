@@ -201,17 +201,17 @@ class EtherCATBagReader:
         self.history_list[-1].updateStatus("Starting bag parser...")
         self.connection, subproc_connection = multiprocessing.Pipe()
         args=(self.bag_filename,subproc_connection)
-        self.subproc = multiprocessing.Process(target=processorMonitorThread, name='process_bag', args=args)
+        self.subproc = multiprocessing.Process(target=processBagSubProc, name='process_bag', args=args)
         self.subproc.start()
 
         # use thread to get data from bag file and put it in history structure
-        self.thread = threading.Thread(target=self.updateSubProc, name='process_thread')
+        self.thread = threading.Thread(target=self.processorMonitorThread, name='process_thread')
         self.thread.start()
 
     def spawnNewHistory(self):
         with self.lock:
             if len(self.history_list) > 0:
-                old_history_list = self.history_list[-1]
+                old_history = self.history_list[-1]
                 old_history.updateStatus("Complete")
             print "Spawning a new bag reader EtherCAT History"
             title = "%s - %d" % (os.path.basename(self.bag_filename), len(self.history_list))
@@ -226,9 +226,9 @@ class EtherCATBagReader:
         result = self.connection.recv()
         while result is not None:
             (status_msg, system_msg_list) = result
-            history_list[-1].updateStatus(status_msg)
+            self.history_list[-1].updateStatus(status_msg)
             for system_msg in system_msg_list:
-                if isNewEtherCATRun(new_system_msg, old_system_msg):
+                if isNewEtherCATRun(system_msg, self.last_system_msg):
                     self.spawnNewHistory()                
                 history = self.history_list[-1]  # new data goes to most recent item on list
                 history.addEtherCATSystemMsg(system_msg)
