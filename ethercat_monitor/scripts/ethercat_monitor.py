@@ -84,6 +84,8 @@ def usage(progname):
 #  Method of saving/loading both notes and history from bag file
 #  Unit tests
 #  Way to create plot of dropped/late packets
+#  Allow bagfiles with different topics to create multiple tabs (do bag yaml pre-processing in thread
+#  Have bag processor die when ethercat monitor quits
 
 class TimestampSelect(wx.Panel):
     def __init__(self,parent,name):

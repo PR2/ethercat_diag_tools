@@ -124,7 +124,7 @@ class EtherCATSubscriber:
     """ 
     Class contains subscriber and callback function for disagnostics.
     The callback will append new diagnostic pr2_etherCAT diagnostics data to a given EteherCATHistory.
-    This allows subscriber data can be redirected to a new EtherCATHistory when needed.
+   This allows subscriber data can be redirected to a new EtherCATHistory when needed.
     """    
     def __init__(self, topic_name):
         self.topic_name = topic_name
@@ -317,6 +317,13 @@ class EtherCATHistory:
         with self.lock:
             notes = copy.copy(self.notes)
         return notes
+
+    def getAllTimestepData(self):
+        with self.lock:
+            history = copy.copy(self.history)
+            if self.newest_tsd is not None:
+                history.append(self.newest_tsd)
+            return history
 
     def getTimestepData(self, timestamp):
         with self.lock:            

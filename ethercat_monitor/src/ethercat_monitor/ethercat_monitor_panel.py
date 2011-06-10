@@ -10,6 +10,7 @@ from ethercat_monitor.cell_data import CellData, cell_data_empty
 from ethercat_monitor.yaml_dialog import YamlDialog
 from ethercat_monitor.wx_util import displayErrorDialog
 from ethercat_monitor.timestep_data import EtherCATHistoryTimestepDataNote
+from ethercat_history_panel import EtherCATHistoryDialog
 
 _yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
 
@@ -97,6 +98,9 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
         button_hsizer2.Add(self.zero_button,0)
         button_hsizer2.Add(self.note_button,0)
 
+        self.view_history_button = wx.Button(self, -1, "View History")
+        self.Bind(wx.EVT_BUTTON, self.onViewHistory, self.view_history_button)
+
         # combo box allow choice between absolute and relative values
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
         self.display_combo.SetSelection(0)  # set selection to absolute on startup
@@ -140,6 +144,7 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
         vsizer0.Add(self.status_text,0,wx.EXPAND)
         vsizer0.Add(self.display_combo, 0)
         vsizer0.Add(self.order_combo, 0)
+        vsizer0.Add(self.view_history_button, 0)
         vsizer0.Add(button_hsizer2, 0)
         vsizer0.Add(button_hsizer1, 0)
         vsizer0.Add(self.note_listbox, 1)
@@ -219,6 +224,11 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
             for index in selections:
                 if index < len(notes):
                     self.note_listbox.Select(index)
+
+    def onViewHistory(self, event):
+        dlg = EtherCATHistoryDialog(self, self.history)
+        dlg.ShowModal()
+        dlg.Destroy()
 
     def getSelectedNote(self):
         index = self.note_listbox.GetSelection()

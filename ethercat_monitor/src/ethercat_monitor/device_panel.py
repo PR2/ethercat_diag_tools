@@ -38,7 +38,7 @@
 
 import wx
 import wx.grid
-import wx.lib.scrolledpanel
+#import wx.lib.scrolledpanel
 
 from ethercat_monitor.cell_data import CellData, cell_data_empty
 
@@ -46,41 +46,61 @@ from ethercat_monitor.wx_util import levelToBackgroundColor
 
 from  ethercat_monitor.ethercat_port_order import genPortOrder
 
-class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
+#wx.lib.scrolledpanel.ScrolledPanel
+class DevicePanel(wx.Panel):
     def __init__(self, parent):
-        wx.lib.scrolledpanel.ScrolledPanel.__init__(self,parent,-1)
+        wx.Panel.__init__(self, parent, -1)
+        #wx.lib.scrolledpanel.ScrolledPanel.__init__(self,parent,-1)
+
 
         self.num_rows = 14
+        # Header of device grid.  Hack to keep header at top of grid while other grid scrolls
+        #header_grid = wx.grid.Grid(self) 
+        #self.header_grid = header_grid
         # Device grid
-        device_grid = wx.grid.Grid(self) 
-        device_grid.CreateGrid(0,self.num_rows)
-        device_grid.SetColLabelValue(0, "Device")
-        device_grid.SetColLabelValue(1, "HWID");
-        device_grid.SetColLabelValue(2, "Position")
-        device_grid.SetColLabelValue(3, "Valid")
-        device_grid.SetColLabelValue(4, "Port")
-        device_grid.SetColLabelValue(5, "LostLink")
-        device_grid.SetColLabelValue(6, "Frame")
-        device_grid.SetColLabelValue(7, "Est Drops")
-
-        device_grid.SetColLabelValue(8, "Empty")
-        device_grid.SetColLabelValue(9, "Rx")
-        device_grid.SetColLabelValue(10, "FwdRx")
-        device_grid.SetColLabelValue(11, "EPU")
-        device_grid.SetColLabelValue(12, "PDI")
-        device_grid.SetColLabelValue(13, "Open")
-
-        device_grid.SetRowLabelSize(0) # hide the row labels
-        device_grid.AutoSize()
+        device_grid = wx.grid.Grid(self)
         self.device_grid = device_grid
 
+        device_grid.CreateGrid(0,self.num_rows)
+        #header_grid.CreateGrid(0,self.num_rows)
+
+        self.SetColLabelValue(0, "Device")
+        self.SetColLabelValue(1, "HWID");
+        self.SetColLabelValue(2, "Position")
+        self.SetColLabelValue(3, "Valid")
+        self.SetColLabelValue(4, "Port")
+        self.SetColLabelValue(5, "Lost\nLinks")
+        self.SetColLabelValue(6, "Frame\nErrors")
+        self.SetColLabelValue(7, "Est\nDrops")
+        self.SetColLabelValue(8, "Empty")
+        self.SetColLabelValue(9, "Rx")
+        self.SetColLabelValue(10, "Forward\nRx")
+        self.SetColLabelValue(11, "EPU")
+        self.SetColLabelValue(12, "PDI")
+        self.SetColLabelValue(13, "Open")
+
+        #header_grid.SetRowLabelSize(0) # hide the row labels
+        device_grid.SetRowLabelSize(0) # hide the row labels
+
+        device_grid.SetColLabelSize(device_grid.GetDefaultColLabelSize() * 2)
+        device_grid.AutoSize()
+
+        device_grid.EnableDragGridSize(False)
+
         vsizer = wx.BoxSizer(wx.VERTICAL)
-        vsizer.Add(self.device_grid, wx.EXPAND)
+        #vsizer.Add(self.header_grid, 0, wx.EXPAND)
+        vsizer.Add(self.device_grid, 1, wx.EXPAND)
 
         self.SetSizer(vsizer)
         self.SetAutoLayout(1)
-        self.SetupScrolling()
+        #self.SetupScrolling()
 
+        dir (self.device_grid)
+
+
+    def SetColLabelValue(self, col_num, label_value):    
+        #self.header_grid.SetColLabelValue(col_num, label_value)
+        self.device_grid.SetColLabelValue(col_num, label_value)
 
     def genPacketOrderedList(self, tsd):
         """ Return list of (dev_name, device, port_num, port) tuples in that packet would go through devices"""
@@ -143,7 +163,6 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
                 row_data[12] = CellData(device.pdi_errors, ERROR if (device.pdi_errors != 0) else DATA)
             data.append(row_data)
             last_dev_name = device.name
-            
 
         # Re-adjust grid to have appropriate number of rows
         grid = self.device_grid
@@ -160,5 +179,4 @@ class DevicePanel(wx.lib.scrolledpanel.ScrolledPanel):
                 grid.SetCellBackgroundColour(row,col,bg_color)
                 grid.SetReadOnly( row, col );
 
-        grid.AutoSize()
-
+        grid.AutoSizeColumns()

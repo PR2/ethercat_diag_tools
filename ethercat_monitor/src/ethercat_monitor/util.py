@@ -37,7 +37,7 @@ import math
 
 def prettyTimestamp(timestamp):
     """ Returns ros timestamp in pretty format """
-    return time.strftime("%a, %b %d, %I:%M.%S %p", time.localtime(timestamp.to_sec()))
+    return time.strftime("%a, %b %d %Y, %I:%M.%S %p", time.localtime(timestamp.to_sec()))
 
 def prettyDuration(duration):
     """ Returns duration into pretty format  Hours,Min,Sec """
@@ -48,11 +48,22 @@ def prettyDuration(duration):
         in_future = True
     secs_per_min  = 60.0
     secs_per_hour = secs_per_min * 60.0
+    secs_per_day  = secs_per_hour * 24.0
+    secs_per_week = secs_per_day * 7.0
+
+    weeks = math.floor(secs / secs_per_week)
+    secs -= weeks * secs_per_week
+    days = math.floor(secs / secs_per_day)
+    secs -= days * secs_per_day
     hours = math.floor(secs / secs_per_hour)
     secs -= hours * secs_per_hour
     mins = math.floor(secs / secs_per_min)
     secs -= mins * secs_per_min
     result = ""
+    if weeks > 0:    
+        result += ("%d week%s "%(weeks, "s" if weeks > 1 else ""))
+    if days > 0:    
+        result += ("%d day%s "%(days, "s" if days > 1 else ""))
     if hours > 0:
         result += ("%d hour%s "%(hours, "s" if hours > 1 else ""))
     if mins > 0:
