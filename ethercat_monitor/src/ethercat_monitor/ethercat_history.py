@@ -192,38 +192,63 @@ class EtherCATBagReader:
         self.lock = threading.Lock()        
         self.history_list = []
         self.last_system_msg = None
-        self.spawnNewHistory()
 
         # Parseing bag file is more CPU intesive than I/O intesive.
         # Because of the global interpreter lock, using a thread to perform 
         # processing would bog down application.  Instead, use a separate 
         # process to do most of work parsing bag file
-        self.history_list[-1].updateStatus("Starting bag parser...")
-        self.connection, subproc_connection = multiprocessing.Pipe()
-        args=(self.bag_filename,subproc_connection)
-        self.subproc = multiprocessing.Process(target=processBagSubProc, name='process_bag', args=args)
-        self.subproc.start()
+
+        #self.connection, subproc_connection = multiprocessing.Pipe()
 
         # use thread to get data from bag file and put it in history structure
         self.thread = threading.Thread(target=self.processorMonitorThread, name='process_thread')
         self.thread.start()
 
-    def spawnNewHistory(self):
+    def spawnNewHistory(self, topic_name):
         with self.lock:
             if len(self.history_list) > 0:
                 old_history = self.history_list[-1]
                 old_history.updateStatus("Complete")
             print "Spawning a new bag reader EtherCAT History"
-            title = "%s - %d" % (os.path.basename(self.bag_filename), len(self.history_list))
+            title = "%s - %d" % (topic_name, len(self.history_list))
             new_history = EtherCATHistory(title)
             self.history_list.append(new_history)
 
     def processorMonitorThread(self):
-        """Pulls updates from subprocess and adds them to history 
+        """Looks at bag summary and starts subprocess to parse bag data
+        Then, pulls updates from subprocess and adds them to history 
         Updates are in form of EtherCATSystemStatus messages. 
-        Wrap them in timestep data class before adding them to queue
+        Wrap them in timestep data class before adding them to history
         """
-        result = self.connection.recv()
+        bag = rosbag.Bag(self.bag_filename)
+
+        # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
+        y = yaml.load(bag._get_yaml_info())
+        matching_topics = [ ]
+        for topic_info in y['topics']:
+            if topic_info['type'] == 'diagnostic_msgs/DiagnosticArray':
+                topic_name = topic_info['topic']
+                num_msgs = int(topic_info['messages'])
+                matching_topics.append( (topic_name, num_msgs) )
+
+        bag.close()
+
+        if len(matching_topics) == 0:            
+            raise RuntimeError("No diagnostic data in bag file")
+        elif len(matching_topics) > 1:
+            # todo, fix to support multiple topics from bag file
+            raise RuntimeError("Multiple matching topics in bag file")
+
+        topic_name, total_msgs = matching_topics[0]
+        self.spawnNewHistory(topic_name)
+        self.history_list[-1].updateStatus("Starting bag parser...")
+
+        self.queue = multiprocessing.Queue(100)
+        args=(self.bag_filename, topic_name, total_msgs, self.queue)
+        self.subproc = multiprocessing.Process(target=processBagSubProc, name='process_bag', args=args)
+        self.subproc.start()
+
+        result = self.queue.get()
         while result is not None:
             (status_msg, system_msg_list) = result
             self.history_list[-1].updateStatus(status_msg)
@@ -233,10 +258,11 @@ class EtherCATBagReader:
                 history = self.history_list[-1]  # new data goes to most recent item on list
                 history.addEtherCATSystemMsg(system_msg)
                 self.last_system_msg = system_msg
-            result = self.connection.recv()
+            result = self.queue.get()
         print "Subprocess is complete"
         self.subproc.join()
         self.subproc = None
+
 
     def getSourceDesc(self):
         """ Returns string describing source of reader data"""
@@ -359,30 +385,14 @@ class EtherCATHistory:
 
 
 
-def processBagSubProc(bag_filename, connection):
+def processBagSubProc(bag_filename, topic_name, total_msgs, queue):
     """ Processes diagnostic message in bag file, puts results in connection as tuple of (status_msg, result_list)"""
+    timeout = 30.0  #
     try:
         if not os.path.isfile(bag_filename): 
             raise RuntimeError("Cannot locate input bag file %s" % bag_filename)
 
         bag = rosbag.Bag(bag_filename)
-
-        # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
-        y = yaml.load(bag._get_yaml_info())
-        matching_topics = [ ]
-        for topic_info in y['topics']:
-            if topic_info['type'] == 'diagnostic_msgs/DiagnosticArray':
-                topic_name = topic_info['topic']
-                num_msgs = int(topic_info['messages'])
-                matching_topics.append( (topic_name, num_msgs) )
-
-        if len(matching_topics) == 0:            
-            raise RuntimeError("No diagnostic data in bag file")
-        elif len(matching_topics) > 1:
-            # todo, fix to support multiple topics from bag file
-            raise RuntimeError("Multiple matching topics in bag file")
-
-        topic_name, total_msgs = matching_topics[0]
 
         diag_processor = EtherCATDiagnosticProcessor()
         last_topic = None
@@ -397,15 +407,19 @@ def processBagSubProc(bag_filename, connection):
             msg_count += 1
             if len(data_queue) >= 10:  # put messages in queue 10 at a time
                 status_msg = "Processed %d of %d messages" % (msg_count, total_msgs)
-                connection.send( (status_msg, data_queue) ) 
+                queue.put( (status_msg, data_queue) , timeout=timeout) 
                 data_queue = []
 
-        connection.send( ("Loading complete", data_queue) )
+        queue.put( ("Loading complete", data_queue), timeout=timeout)    
+
+    except multiprocessing.Queue.Full, e:
+        print "Bag subprocessor : queue full"
 
     except Exception, e:
         status_msg = 'ERROR : ' + str(e)
-        print "subproc : ", status_msg
-        connection.send( (status_msg, []) )
+        print "Bag subprocessor : ", status_msg
+        queue.put( (status_msg, []), timeout=timeout)
 
     finally:
-        connection.send( None )
+        bag.close()
+        queue.put( None, timeout=timeout)

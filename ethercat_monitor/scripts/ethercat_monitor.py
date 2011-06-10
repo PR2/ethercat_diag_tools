@@ -207,6 +207,8 @@ class MainWindow(wx.Frame):
         self.Bind(wx.EVT_TIMER, self.onTimer, self.timer)
         self.timer.Start(500)
 
+        vsizer.SetMinSize((1200,600))
+
         self.SetSizer(vsizer)
         self.SetAutoLayout(1)
         vsizer.Fit(self)
