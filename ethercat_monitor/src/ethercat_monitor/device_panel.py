@@ -95,9 +95,6 @@ class DevicePanel(wx.Panel):
         self.SetAutoLayout(1)
         #self.SetupScrolling()
 
-        dir (self.device_grid)
-
-
     def SetColLabelValue(self, col_num, label_value):    
         #self.header_grid.SetColLabelValue(col_num, label_value)
         self.device_grid.SetColLabelValue(col_num, label_value)
