@@ -204,15 +204,16 @@ class EtherCATBagReader:
         self.thread = threading.Thread(target=self.processorMonitorThread, name='process_thread')
         self.thread.start()
 
-    def spawnNewHistory(self, topic_name):
+    def spawnNewHistory(self, description):
         with self.lock:
             if len(self.history_list) > 0:
                 old_history = self.history_list[-1]
                 old_history.updateStatus("Complete")
             print "Spawning a new bag reader EtherCAT History"
-            title = "%s - %d" % (topic_name, len(self.history_list))
+            title = "%s - %d" % (description, len(self.history_list))
             new_history = EtherCATHistory(title)
             self.history_list.append(new_history)
+        return new_history
 
     def processorMonitorThread(self):
         """Looks at bag summary and starts subprocess to parse bag data
@@ -224,24 +225,78 @@ class EtherCATBagReader:
 
         # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
         y = yaml.load(bag._get_yaml_info())
-        matching_topics = [ ]
+        diagnostic_topics = [ ]
+        note_topics = [ ]
+        system_topics = [ ]
         for topic_info in y['topics']:
-            if topic_info['type'] == 'diagnostic_msgs/DiagnosticArray':
-                topic_name = topic_info['topic']
-                num_msgs = int(topic_info['messages'])
-                matching_topics.append( (topic_name, num_msgs) )
+            topic_name = topic_info['topic']
+            num_msgs = int(topic_info['messages'])
+            topic_type = topic_info['type']
+            if topic_type == 'diagnostic_msgs/DiagnosticArray':
+                diagnostic_topics.append( (topic_name, num_msgs) )
+            if topic_type == 'ethercat_monitor/StatusNote':
+                note_topics.append( (topic_name, num_msgs) )
+            if topic_type == 'ethercat_monitor/EtherCATSystemStatus':
+                system_topics.append( (topic_name, num_msgs) )
 
         bag.close()
 
-        if len(matching_topics) == 0:            
+        # if there is a note topic, then there should be just one threading topic
+        if (len(diagnostic_topics) == 0) and (len(system_topics) == 0):
             raise RuntimeError("No diagnostic data in bag file")
-        elif len(matching_topics) > 1:
-            # todo, fix to support multiple topics from bag file
-            raise RuntimeError("Multiple matching topics in bag file")
 
+        if (len(note_topics) > 1):
+            raise RuntimeError("Bag contains multiple note topics")
+
+        if (len(note_topics) == 1) and (len(system_topics) > 1):
+            raise RuntimeError("Bag contains note topic and multiple system topics")
+
+        # start a thread for each diagnostics topic
+        thread_list = []
+        for topic_name,num_msgs in diagnostic_topics:
+            args = (bag_filename, topic_name, msg_msgs)
+            thread = threading.Thread(target=self.processDiagnosticsBagThread, args=args)
+            thread_list.append(thread)
+
+        if len(note_topics) == 1: 
+            (system_topic_name, num_system_msgs) = system_topics[0]
+            (note_topic_name,   num_note_msgs  ) = note_topics[0]
+            num_msgs = num_note_msgs + num_system_msgs
+            args = (self.bag_filename, system_topic_name, note_topic_name, num_msgs)
+            thread = threading.Thread(target=self.processSavedBagThread, args=args)
+            thread_list.append(thread)
+        else:            
+            for system_topic_name,num_msgs in system_topics:
+                args = (self.bag_filename, system_topic_name, None, num_msgs)
+                thread = threading.Thread(target=self.processSavedBagThread, args=args)                
+                thread_list.append(thread)
+
+        for thread in thread_list:
+            thread.start()
+
+        # collect all running threads
+        for thread in thread_list:            
+            thread.join()
+
+    def processSavedBagThread(self, bag_filename, system_topic_name, note_topic_name, num_msgs):
+        bag = rosbag.Bag(self.bag_filename)        
+        history = self.spawnNewHistory("saved")
+        topic_list = [system_topic_name]
+        if note_topic_name is not None:
+            topic_list.append(note_topic_name)
+        for topic, msg, unused in bag.read_messages(topics=topic_list):
+            if topic == system_topic_name:
+                history.addEtherCATSystemMsg(msg)
+            elif (note_topic_name is not None) and (topic == note_topic_name):
+                tsd = EtherCATTimestepData(msg.system_status)
+                note = EtherCATHistoryTimestepDataNote(tsd, msg.note)
+                history.addNote(note)
+        bag.close()
+            
+    def processDiagnosticsBagThread(self, bag_filename, topic_name, total_msgs, num_messages):
         topic_name, total_msgs = matching_topics[0]
-        self.spawnNewHistory(topic_name)
-        self.history_list[-1].updateStatus("Starting bag parser...")
+        history = self.spawnNewHistory(topic_name)
+        history.updateStatus("Starting bag parser...")
 
         self.queue = multiprocessing.Queue(100)
         args=(self.bag_filename, topic_name, total_msgs, self.queue)
@@ -251,11 +306,10 @@ class EtherCATBagReader:
         result = self.queue.get()
         while result is not None:
             (status_msg, system_msg_list) = result
-            self.history_list[-1].updateStatus(status_msg)
+            history.updateStatus(status_msg)
             for system_msg in system_msg_list:
                 if isNewEtherCATRun(system_msg, self.last_system_msg):
-                    self.spawnNewHistory()                
-                history = self.history_list[-1]  # new data goes to most recent item on list
+                    history = self.spawnNewHistory()                
                 history.addEtherCATSystemMsg(system_msg)
                 self.last_system_msg = system_msg
             result = self.queue.get()
@@ -347,9 +401,7 @@ class EtherCATHistory:
     def getAllTimestepData(self):
         with self.lock:
             history = copy.copy(self.history)
-            if self.newest_tsd is not None:
-                history.append(self.newest_tsd)
-            return history
+        return history
 
     def getTimestepData(self, timestamp):
         with self.lock:            
@@ -377,9 +429,15 @@ class EtherCATHistory:
             notes = copy.copy(self.notes)
             
         outbag = rosbag.Bag(outbag_filename, 'w', compression=rosbag.Compression.BZ2)
+        for note in notes:
+            msg = ethercat_monitor.msg.StatusNote() 
+            msg.note = note.note_msg
+            msg.system_status = note.timestep_data.system
+            outbag.write('notes', msg, t=note.timestep_data.getTimestamp() )
         for tsd in history:
-            outbag.write('ethercat_system_status', tsd.system, t=tsd.system.header.stamp)
-        print "Saved %d messages to history" % len(history)
+            outbag.write('system_status', tsd.system, t=tsd.system.header.stamp)
+
+        print "Saved %d notes and %d messages to history" % (len(notes), len(history))
         outbag.close()
         
 

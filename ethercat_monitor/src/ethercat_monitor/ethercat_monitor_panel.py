@@ -59,7 +59,7 @@ class EtherCATMonitorReaderPanel(wx.Panel):
             panel.update()
 
     def saveBag(self):
-        panel = getCurrentPanel(self)
+        panel = self.getCurrentPanel()
         if panel is not None:
             panel.saveBag()
         else:
