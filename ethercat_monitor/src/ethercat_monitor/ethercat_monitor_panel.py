@@ -10,7 +10,8 @@ from ethercat_monitor.cell_data import CellData, cell_data_empty
 from ethercat_monitor.yaml_dialog import YamlDialog
 from ethercat_monitor.wx_util import displayErrorDialog
 from ethercat_monitor.timestep_data import EtherCATHistoryTimestepDataNote
-from ethercat_history_panel import EtherCATHistoryDialog
+from ethercat_monitor.ethercat_history_panel import EtherCATHistoryDialog
+from ethercat_monitor.history_plot import HistoryPlotFrame
 
 _yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
 
@@ -100,6 +101,11 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
 
         self.view_history_button = wx.Button(self, -1, "View History")
         self.Bind(wx.EVT_BUTTON, self.onViewHistory, self.view_history_button)
+        self.plot_history_button = wx.Button(self, -1, "Plot History")
+        self.Bind(wx.EVT_BUTTON, self.onPlotHistory, self.plot_history_button)
+        button_hsizer3 = wx.BoxSizer(wx.HORIZONTAL)
+        button_hsizer3.Add(self.view_history_button,0)
+        button_hsizer3.Add(self.plot_history_button,0)
 
         # combo box allow choice between absolute and relative values
         self.display_combo = wx.ComboBox(self, -1, choices=['Absolute','Relative'], style=wx.CB_READONLY)
@@ -144,7 +150,7 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
         vsizer0.Add(self.status_text,0,wx.EXPAND)
         vsizer0.Add(self.display_combo, 0)
         vsizer0.Add(self.order_combo, 0)
-        vsizer0.Add(self.view_history_button, 0)
+        vsizer0.Add(button_hsizer3, 0)
         vsizer0.Add(button_hsizer2, 0)
         vsizer0.Add(button_hsizer1, 0)
         vsizer0.Add(self.note_listbox, 1)
@@ -229,6 +235,18 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
         dlg = EtherCATHistoryDialog(self, self.history)
         dlg.ShowModal()
         dlg.Destroy()
+
+    def onPlotHistory(self, event):
+        #dlg = EtherCATHistoryDialog(self, self.history)
+        #dlg.ShowModal()
+        #dlg.Destroy()
+        plot = HistoryPlotFrame(self, self.history)
+        plot.SetSize(wx.Size(600, 600))
+        plot.Layout()
+        plot.Show(True)
+        plot.Raise()
+
+
 
     def getSelectedNote(self):
         index = self.note_listbox.GetSelection()
