@@ -257,11 +257,14 @@ class MainWindow(wx.Frame):
 
     def onSaveBag(self, event):
         panel = self.getCurrentPanel()
-        if panel is not None:
-            panel.saveBag()
+        if panel is None:
+            displayErrorDialog(self, "No tab is selected")
         else:
-            displayErrorDialog("No tab is selected")
-
+            try :
+                panel.saveBag()
+            except Exception, e:                
+                displayErrorDialog(self, "Error occurred while saving bag : " + str(e))
+ 
     def onLoadBag(self, event):
         dlg = wx.FileDialog(self, "Select bag file to load", style=wx.FD_OPEN)
         if dlg.ShowModal() == wx.ID_OK:        

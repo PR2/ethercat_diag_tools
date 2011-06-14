@@ -34,7 +34,7 @@ class NoteEditDialog(wx.Dialog):
         self.Close()
 
     def onOk(self, event):
-        self.note.note_msg = self.note_textctrl.GetValue()
+        self.note.note_msg = str(self.note_textctrl.GetValue())
         self.Close()
 
     def onClose(self, event):
