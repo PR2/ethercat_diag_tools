@@ -18,8 +18,6 @@ class HistoryPlotFrame(wx.Frame):
 
         fp = matplotlib.font_manager.FontProperties(size=10)
 
-        axes = fig.add_subplot(111)
-        axes.set_axis_bgcolor('white')
         #pylab.setp(axes.get_xticklabels(), fontsize=6)
         #pylab.setp(axes.get_yticklabels(), fontsize=8)
 
@@ -27,24 +25,41 @@ class HistoryPlotFrame(wx.Frame):
         time_list = []
         dropped_list = []
         late_list = []
+        lost_links_list = []
+        frame_errors_list = []
         for tsd in tsd_list:
-            time_list.append(tsd.getTimestamp().to_sec())
-            dropped_list.append(tsd.system.master.dropped)
-            late_list.append(tsd.system.master.late)
+            summary = tsd.getSummary()
+            time_list.append(summary.timestamp.to_sec())
+            dropped_list.append(summary.dropped)
+            late_list.append(summary.late)
+            lost_links_list.append(summary.lost_links)
+            frame_errors_list.append(summary.frame_errors)
 
         start_time=tsd_list[0].getTimestamp().to_sec()
         time_list = (pylab.array(time_list) - start_time) / 60.
         dropped_list = pylab.array(dropped_list)
         late_list = pylab.array(late_list)
 
+        axes = fig.add_subplot(211)
+        axes.set_axis_bgcolor('white')
         axes.plot(time_list, dropped_list, 'r-', linewidth=1, picker=5, label='dropped')
         axes.plot(time_list, late_list, 'b-', linewidth=1, picker=5, label='late')
+        axes.plot(time_list, frame_errors_list, 'g-', linewidth=1, picker=5, label='frame_errors')
         axes.legend(loc='best', prop=fp)        
         axes.xaxis.set_label_text('Time (minutes)')
         axes.yaxis.set_label_text('Packets')
-        #print dir(axes.yaxis)
         print axes.yaxis.get_axes()
         axes.grid(True, color='gray')
+
+        axes = fig.add_subplot(212)
+        axes.set_axis_bgcolor('white')
+        axes.plot(time_list, lost_links_list, 'r-', linewidth=1, picker=5, label='lost links')
+        axes.legend(loc='best', prop=fp)        
+        axes.xaxis.set_label_text('Time (minutes)')
+        axes.yaxis.set_label_text('Links')
+        print axes.yaxis.get_axes()
+        axes.grid(True, color='gray')
+
 
         canvas = matplotlib.backends.backend_wxagg.FigureCanvasWxAgg(self, -1, fig)
         #canvas.mpl_connect('pick_event', self.onPick)
