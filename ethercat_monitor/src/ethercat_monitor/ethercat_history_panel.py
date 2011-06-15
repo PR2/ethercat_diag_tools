@@ -27,13 +27,14 @@ class EtherCATHistoryPanel(wx.Panel):
 
         self.tsd_grid = wx.grid.Grid(self)
         grid = self.tsd_grid
-        grid.CreateGrid(len(self.tsd_list), 5)
+        grid.CreateGrid(len(self.tsd_list), 6)
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.onSelectGridCell, self.tsd_grid)
         grid.SetColLabelValue(0, "Date")
         grid.SetColLabelValue(1, "Time")
         grid.SetColLabelValue(2, "Dropped")
-        grid.SetColLabelValue(3, "Frame\nError")
-        grid.SetColLabelValue(4, "Lost\nLinks")
+        grid.SetColLabelValue(3, "Late")
+        grid.SetColLabelValue(4, "Frame\nError")
+        grid.SetColLabelValue(5, "Lost\nLinks")
 
         grid.SetRowLabelSize(0) # hide the row labels
         grid.SetColLabelSize(grid.GetDefaultColLabelSize() * 2)
@@ -89,22 +90,17 @@ class EtherCATHistoryPanel(wx.Panel):
             for col in range(4):
                 grid.SetReadOnly( row, col );
 
-            localtime = time.localtime(tsd.getTimestamp().to_sec())
+            summary = tsd.getSummary()
+            localtime = time.localtime(summary.timestamp.to_sec())
             time_str = time.strftime("%I:%M %p", localtime)
             date_str = time.strftime("%a, %b %d %Y", localtime)
             
-            frame_errors = 0
-            lost_links = 0
-            for dev in tsd.getDevices():
-                for port in dev.ports:
-                    frame_errors += port.frame_errors
-                    frame_errors += port.lost_links
-
             grid.SetCellValue(row,0, date_str)
             grid.SetCellValue(row,1, time_str)
-            grid.SetCellValue(row,2, str(tsd.getMaster().dropped))
-            grid.SetCellValue(row,3, str(frame_errors))
-            grid.SetCellValue(row,4, str(lost_links))
+            grid.SetCellValue(row,2, str(summary.dropped))
+            grid.SetCellValue(row,3, str(summary.late))
+            grid.SetCellValue(row,4, str(summary.frame_errors))
+            grid.SetCellValue(row,5, str(summary.lost_links))
 
         grid.AutoSizeColumns()
 

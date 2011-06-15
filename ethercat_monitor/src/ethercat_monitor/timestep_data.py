@@ -56,6 +56,13 @@ def getMasterDiff(new, old):
     return diff
 
 
+class EtherCATTimestepSummary:
+    def __init__(self):
+        self.timestamp = None
+        self.dropped = 0
+        self.late = 0
+        self.lost_links = 0
+        self.frame_errors = 0
 
 class EtherCATHistoryTimestepData:
     def __init__(self,system):
@@ -74,6 +81,21 @@ class EtherCATHistoryTimestepData:
             raise RuntimeError("Devices but no master")
         else:
             raise RuntimeError("Master but no devices")
+
+    def getSummary(self):
+        summary = EtherCATTimestepSummary()
+        frame_errors = 0
+        lost_links = 0
+        for dev in self.getDevices():
+            for port in dev.ports:
+                frame_errors += port.frame_errors
+                lost_links += port.lost_links
+        summary.timestamp    = self.getTimestamp()
+        summary.frame_errors = frame_errors
+        summary.lost_links   = lost_links
+        summary.late         = self.getMaster().late
+        summary.dropped      = self.getMaster().dropped
+        return summary
 
     def numDevices(self):
         return len(self.system.devices)
