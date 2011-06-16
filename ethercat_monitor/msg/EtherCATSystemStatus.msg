@@ -1,3 +1,3 @@
-Header header
+time stamp
 EtherCATMasterStatus   master
 EtherCATDeviceStatus[] devices

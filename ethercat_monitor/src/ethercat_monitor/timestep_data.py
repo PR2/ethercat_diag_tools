@@ -70,7 +70,7 @@ class EtherCATHistoryTimestepData:
         self.timestamp_old = None
 
     def getTimestamp(self):
-        return self.system.header.stamp
+        return self.system.stamp
         
     def hasData(self):        
         if (len(self.system.devices) > 0) and self.has_master:

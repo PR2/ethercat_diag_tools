@@ -51,6 +51,7 @@ import yaml
 import threading
 import multiprocessing
 import socket
+#import roslib.msg
 
 from ethercat_monitor.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDeviceAddDiag
 from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
@@ -61,7 +62,7 @@ from drop_estimator import DropEstimator
 
 import ethercat_monitor.msg
 import ethercat_monitor.timestep_data
-import std_msgs.msg
+#import std_msgs.msg
 
 
 
@@ -102,8 +103,18 @@ class EtherCATDiagnosticProcessor:
                 self.other_diag_map[status.name] = None
 
         if master is not None:
-            hdr = std_msgs.msg.Header(msg.header.seq, msg.header.stamp, msg.header.frame_id)
-            sys_status = ethercat_monitor.msg.EtherCATSystemStatus(hdr, master, devices)
+            #hdr = std_msgs.msg.Header(msg.header.seq, msg.header.stamp, msg.header.frame_id)
+            #hdr = roslib.msg.Header(msg.header.seq, msg.header.stamp, msg.header.frame_id)
+            sys_status = ethercat_monitor.msg.EtherCATSystemStatus(msg.header.stamp, master, devices)
+            #sys_status.master = master
+            #sys_status.devices = devices
+            #hdr = sys_status.hdr
+            #hdr.stamp = msg.header.stamp
+
+            #sys_status.master = master
+            #sys_status.devices = devices
+            #hdr = sys_status.header
+            
             return sys_status
         else:
             return None
