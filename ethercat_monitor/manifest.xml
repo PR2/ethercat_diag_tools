@@ -10,7 +10,7 @@ Monitors etherCAT chains for packet drops, allows users to localize a dropped pa
   <depend package="rospy"/>
   <depend package="rosbag"/>
   <depend package="diagnostic_msgs"/>
-
+  <depend package="std_msgs"/>
 
 </package>
 

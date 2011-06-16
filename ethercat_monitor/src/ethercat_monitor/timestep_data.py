@@ -125,7 +125,7 @@ class EtherCATHistoryTimestepData:
         between this timestamp and older timestamp"""
 
         sys_status = ethercat_monitor.msg.EtherCATSystemStatus()
-        sys_status.header = self.system.header
+        sys_status.stamp = self.system.stamp
         tsd_diff = EtherCATHistoryTimestepData(sys_status)
 
         tsd_old = timestamp_data_old

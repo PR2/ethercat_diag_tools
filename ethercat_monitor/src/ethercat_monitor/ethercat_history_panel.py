@@ -61,8 +61,7 @@ class EtherCATHistoryPanel(wx.Panel):
         event.Skip()
 
     def onAddNote(self, event):
-        self.current_selection
-        if self.current_selection > 0:
+        if self.current_selection >= 0:
             tsd = self.tsd_list[self.current_selection]
             note = EtherCATHistoryTimestepDataNote(tsd, "Type note here")
             dlg = NoteEditDialog(self, note)
