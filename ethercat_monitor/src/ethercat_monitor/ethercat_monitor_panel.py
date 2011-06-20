@@ -58,6 +58,10 @@ class EtherCATMonitorReaderPanel(wx.Panel):
         panel = self.getCurrentPanel()
         if panel is not None:
             panel.update()
+        # pop update error dialog if reader has stored error message
+        error_msg = self.reader.getAndClearErrorMsg()
+        if error_msg is not None:
+            displayErrorDialog(self, error_msg)
 
     def saveBag(self):
         panel = self.getCurrentPanel()
@@ -317,9 +321,9 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
 
 
     def saveBag(self):
-        dlg = wx.FileDialog(self, "Select bag file to open", style=wx.FD_OPEN)
-        if dlg.ShowModal() == wx.ID_OK:        
-            bag_filename = os.path.join(dlg.GetDirectory(), dlg.GetFilename())
+        dlg = wx.FileDialog(self, "Select bag file to open", style=(wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT))
+        if dlg.ShowModal() == wx.ID_OK:
+            bag_filename = dlg.GetPath()
             self.history.saveBag(bag_filename)
             print "Saved bag file to ", bag_filename
 

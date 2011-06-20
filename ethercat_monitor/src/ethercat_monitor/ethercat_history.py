@@ -51,6 +51,7 @@ import yaml
 import threading
 import multiprocessing
 import socket
+import traceback
 #import roslib.msg
 
 from ethercat_monitor.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDeviceAddDiag
@@ -145,6 +146,7 @@ class EtherCATSubscriber:
         self.diag_processor = EtherCATDiagnosticProcessor()
         self.subscriber = rospy.Subscriber(str(topic_name), DiagnosticArray, self.diagnosticsCallback)
         self.last_system_msg = None
+        self.error_msg = None
         self.dot_count = 0
         self.spawnNewHistory()
 
@@ -193,6 +195,11 @@ class EtherCATSubscriber:
     def getTopic(self):
         return self.topic_name
 
+    def getAndClearErrorMsg(self):
+        with self.lock:
+            msg = self.error_msg    
+            self.error_msg = None
+        return msg
 
 
 class EtherCATBagReader:
@@ -204,6 +211,7 @@ class EtherCATBagReader:
         self.lock = threading.Lock()        
         self.history_list = []
         self.last_system_msg = None
+        self.error_msg = None
 
         # Parseing bag file is more CPU intesive than I/O intesive.
         # Because of the global interpreter lock, using a thread to perform 
@@ -228,74 +236,95 @@ class EtherCATBagReader:
         return new_history
 
     def processorMonitorThread(self):
-        """Looks at bag summary and starts subprocess to parse bag data
-        Then, pulls updates from subprocess and adds them to history 
-        Updates are in form of EtherCATSystemStatus messages. 
-        Wrap them in timestep data class before adding them to history
+        """Looks at bag summary to determine type of information saved in bag.
+        Possible types: 
+          * Diagnostics data. Message types:  
+             * diagnostics_msgs/DiagnosticsArray
+          * ethercat_monitor saved data. Message types:
+             * ethercat_monitor/SavedBagHeader
+             * ethercat_monitor/EtherCATSystemStatus
+             * ethercat_monitor/StatusNote
+          * Converted diagnostics data, produced by running convert.py  :
+             * ethercat_monitor/EtherCATSystemStatus
+        For each source of data, the reader creates history class to store data.
         """
-        bag = rosbag.Bag(self.bag_filename)
+        try:
+            bag = rosbag.Bag(self.bag_filename)
 
-        # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
-        y = yaml.load(bag._get_yaml_info())
-        diagnostic_topics = [ ]
-        header_topics = [ ]
-        note_topics = [ ]
-        system_topics = [ ]
-        for topic_info in y['topics']:
-            topic_name = topic_info['topic']
-            num_msgs = int(topic_info['messages'])
-            topic_type = topic_info['type']
-            if topic_type == 'diagnostic_msgs/DiagnosticArray':
-                diagnostic_topics.append( (topic_name, num_msgs) )
-            if topic_type == 'ethercat_monitor/SavedBagHeader':
-                header_topics.append( (topic_name, num_msgs) )
-            if topic_type == 'ethercat_monitor/StatusNote':
-                note_topics.append( (topic_name, num_msgs) )
-            if topic_type == 'ethercat_monitor/EtherCATSystemStatus':
-                system_topics.append( (topic_name, num_msgs) )
+            # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
+            y = yaml.load(bag._get_yaml_info())
+            diagnostic_topics = [ ]
+            header_topics = [ ]
+            note_topics = [ ]
+            system_topics = [ ]
+            for topic_info in y['topics']:
+                topic_name = topic_info['topic']
+                num_msgs = int(topic_info['messages'])
+                topic_type = topic_info['type']
+                if topic_type == 'diagnostic_msgs/DiagnosticArray':
+                    diagnostic_topics.append( (topic_name, num_msgs) )
+                elif topic_type == 'ethercat_monitor/SavedBagHeader':
+                    header_topics.append( (topic_name, num_msgs) )
+                elif topic_type == 'ethercat_monitor/StatusNote':
+                    note_topics.append( (topic_name, num_msgs) )
+                elif topic_type == 'ethercat_monitor/EtherCATSystemStatus':
+                    system_topics.append( (topic_name, num_msgs) )
+                else:
+                    print "Bag contains topic '%s' with unknown message type : " % (topic_name, topic_type)
 
-        bag.close()
+            bag.close()
 
-        # if there is a note topic, then there should be just one threading topic
-        if (len(diagnostic_topics) == 0) and (len(system_topics) == 0):
-            raise RuntimeError("No diagnostic data in bag file")
+            # if there is a note topic, then there should be just one threading topic
+            if (len(diagnostic_topics) == 0) and (len(system_topics) == 0) and (len(header_topics) == 0):
+                raise RuntimeError("No diagnostic data in bag file")
 
-        if (len(note_topics) > 1):
-            raise RuntimeError("Bag contains multiple note topics")
-
-        if (len(header_topics) > 1):
-            raise RuntimeError("Bag contains multiple header topics")
-
-
-        # start a thread for each diagnostics topic
-        thread_list = []
-        for topic_name,num_msgs in diagnostic_topics:
-            args = (self.bag_filename, topic_name, num_msgs)
-            thread = threading.Thread(target=self.processDiagnosticsBagThread, args=args)
-            thread_list.append(thread)
-
-        if len(header_topics) == 1: 
             if len(note_topics) > 1:
-                raise RuntimeError("Bag contains header and multiple note topics")
-            if len(system_topics) > 1:
-                raise RuntimeError("Bag contains header and multiple system topics")
-            (system_topic_name, num_system_msgs) = system_topics[0]
-            (note_topic_name,   num_note_msgs  ) = note_topics[0]
-            (header_topic_name, num_header_msgs ) = header_topics[0]
-            if num_header_msgs != 1:
-                raise RuntimeError("Bag contains multiple (%d) header messages" % num_header_msgs)
-            num_msgs = num_note_msgs + num_system_msgs
-            args = (self.bag_filename, system_topic_name, header_topic_name, note_topic_name, num_msgs)
-            thread = threading.Thread(target=self.processSavedBagThread, args=args)
-            thread_list.append(thread)
-        else:
-            if len(note_topics) > 0:
-                raise RuntimeError("Bag file without header contains note topics")
-            # bag file produced by convert (just has system messages but no notes and no header
-            for topic_name,num_msgs in system_topics:
+                raise RuntimeError("Bag contains multiple note topics")
+
+            if len(header_topics) > 1:
+                raise RuntimeError("Bag contains multiple header topics")
+
+            # start a thread for each diagnostics topic
+            thread_list = []
+            for topic_name,num_msgs in diagnostic_topics:
                 args = (self.bag_filename, topic_name, num_msgs)
-                thread = threading.Thread(target=self.processConvertedBagThread, args=args)                
+                thread = threading.Thread(target=self.processDiagnosticsBagThread, args=args)
                 thread_list.append(thread)
+
+            if len(header_topics) == 1: 
+                if len(note_topics) > 1:
+                    raise RuntimeError("Bag contains header and multiple note topics")
+                if len(system_topics) > 1:
+                    raise RuntimeError("Bag contains header and multiple system topics")
+                if len(system_topics) > 0:
+                    (system_topic_name, num_system_msgs) = system_topics[0]
+                else:
+                    (system_topic_name, num_system_msgs) = (None, 0)
+                if len(note_topics) > 0:
+                    (note_topic_name, num_note_msgs  ) = note_topics[0]
+                else:
+                    (note_topic_name, num_note_msgs)   = (None, 0)
+                (header_topic_name, num_header_msgs ) = header_topics[0]
+                if num_header_msgs != 1:
+                    raise RuntimeError("Bag contains multiple (%d) header messages" % num_header_msgs)
+                num_msgs = num_note_msgs + num_system_msgs
+                args = (self.bag_filename, system_topic_name, header_topic_name, note_topic_name, num_msgs)
+                thread = threading.Thread(target=self.processSavedBagThread, args=args)
+                thread_list.append(thread)
+            else:
+                if len(note_topics) > 0:
+                    raise RuntimeError("Bag file without header contains note topics")
+                # bag file produced by convert (just has system messages but no notes and no header
+                for topic_name,num_msgs in system_topics:
+                    args = (self.bag_filename, topic_name, num_msgs)
+                    thread = threading.Thread(target=self.processConvertedBagThread, args=args)                
+                    thread_list.append(thread)
+
+        except Exception, e:
+            trace = traceback.format_exc()            
+            with self.lock:
+                self.error_msg = "Error : " + str(e) + '\n' + trace
+            print trace
 
         for thread in thread_list:
             thread.start()
@@ -337,10 +366,11 @@ class EtherCATBagReader:
                 history.updateStatus("Processed %d of %d messages" % (msg_count, num_msgs))
                 
         # pull systems messages (history) from bag file
-        for topic, msg, unused in bag.read_messages(topics=[system_topic_name]):
-            history.addEtherCATSystemMsg(msg)
-            msg_count += 1
-            history.updateStatus("Processed %d of %d messages" % (msg_count, num_msgs))
+        if system_topic_name is not None:
+            for topic, msg, unused in bag.read_messages(topics=[system_topic_name]):
+                history.addEtherCATSystemMsg(msg)
+                msg_count += 1
+                history.updateStatus("Processed %d of %d messages" % (msg_count, num_msgs))
             
         history.updateStatus("Processing complete")            
         bag.close()
@@ -385,6 +415,12 @@ class EtherCATBagReader:
 
     def getTopic(self):
         return None
+
+    def getAndClearErrorMsg(self):
+        with self.lock:
+            msg = self.error_msg    
+            self.error_msg = None
+        return msg
 
 
 

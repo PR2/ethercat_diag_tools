@@ -242,19 +242,18 @@ class MainWindow(wx.Frame):
                 if panel.getReader().getTopic() == dlg.selected_topic:
                     errorDialog("Topic '%s' alread has a connection")
                     return
-            reader = EtherCATSubscriber(dlg.selected_topic)
+            reader = EtherCATSubscriber('/diagnostics')
             self.addPanel(reader)
         else:
             print "Cancel"
         dlg.Destroy()
-        
-        if False:
-            self.history.subscribeToDiagnostics(topic_name)
-            self.current_topic = topic_name
-            self.topic_text.SetValue(self.current_topic)
-            self.tsd_new = None
-            self.tsd_old = None
-            self.update()
+
+        self.history.subscribeToDiagnostics(topic_name)
+        self.current_topic = topic_name
+        self.topic_text.SetValue(self.current_topic)
+        self.tsd_new = None
+        self.tsd_old = None
+        self.update()
 
     def onSaveBag(self, event):
         panel = self.getCurrentPanel()
@@ -267,16 +266,16 @@ class MainWindow(wx.Frame):
                 displayErrorDialog(self, "Error occurred while saving bag : " + str(e))
  
     def onLoadBag(self, event):
-        dlg = wx.FileDialog(self, "Select bag file to load", style=wx.FD_OPEN)
+        dlg = wx.FileDialog(self, "Select bag file to load", style= (wx.FD_OPEN | wx.FD_MULTIPLE) )
         if dlg.ShowModal() == wx.ID_OK:        
-            bag_filename = os.path.join(dlg.GetDirectory(), dlg.GetFilename())
-            if not os.path.isfile(bag_filename): 
-                displayErrorDialog(self, "'%s' is not a file" % bag_filename)
-            else:
+            bag_filenames = dlg.GetPaths()
+            for bag_filename in bag_filenames:
+                if not os.path.isfile(bag_filename): 
+                    displayErrorDialog(self, "'%s' is not a file" % bag_filename)
+                    return
+            for bag_filename in bag_filenames:
                 reader = EtherCATBagReader(bag_filename)
-                "print bag reader created"
                 self.addPanel(reader)
-                "print adding panel"
         
             
     def onTimer(self, event):
