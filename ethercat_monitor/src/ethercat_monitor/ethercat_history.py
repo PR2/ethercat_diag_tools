@@ -559,7 +559,7 @@ class EtherCATHistory:
             msg.system_status = note.timestep_data.system
             outbag.write('notes', msg, t=note.timestep_data.getTimestamp() )
         for tsd in history:
-            outbag.write('system_status', tsd.system, t=tsd.system.header.stamp)
+            outbag.write('system_status', tsd.system, t=tsd.getTimestamp())
 
         print "Saved %d notes and %d messages to history" % (len(notes), len(history))
         outbag.close()

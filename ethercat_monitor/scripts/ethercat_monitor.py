@@ -61,6 +61,7 @@ import unittest
 import getopt
 import itertools
 import os.path
+import traceback
 
 import wx
 import wx.grid
@@ -264,6 +265,7 @@ class MainWindow(wx.Frame):
                 panel.saveBag()
             except Exception, e:                
                 displayErrorDialog(self, "Error occurred while saving bag : " + str(e))
+                traceback.print_exc()
  
     def onLoadBag(self, event):
         dlg = wx.FileDialog(self, "Select bag file to load", style= (wx.FD_OPEN | wx.FD_MULTIPLE) )
