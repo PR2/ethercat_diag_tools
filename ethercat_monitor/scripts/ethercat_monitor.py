@@ -235,25 +235,20 @@ class MainWindow(wx.Frame):
             panel.update()
         self.Layout()
 
-    def onNewTopic(self, topic_name):
+    def onNewTopic(self, event):
         dlg = TopicSelectDialog(None)
         dlg.ShowModal()
         if dlg.selected_topic is not None:
+            topic_name = str(dlg.selected_topic)
             for panel in self.panels:
-                if panel.getReader().getTopic() == dlg.selected_topic:
+                if panel.getReader().getTopic() == topic_name:
                     errorDialog("Topic '%s' alread has a connection")
                     return
-            reader = EtherCATSubscriber('/diagnostics')
+            reader = EtherCATSubscriber(topic_name)
             self.addPanel(reader)
         else:
             print "Cancel"
         dlg.Destroy()
-
-        self.history.subscribeToDiagnostics(topic_name)
-        self.current_topic = topic_name
-        self.topic_text.SetValue(self.current_topic)
-        self.tsd_new = None
-        self.tsd_old = None
         self.update()
 
     def onSaveBag(self, event):

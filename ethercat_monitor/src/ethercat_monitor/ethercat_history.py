@@ -320,18 +320,18 @@ class EtherCATBagReader:
                     thread = threading.Thread(target=self.processConvertedBagThread, args=args)                
                     thread_list.append(thread)
 
+            for thread in thread_list:
+                thread.start()
+
+            # collect all running threads
+            for thread in thread_list:            
+                thread.join()
+
         except Exception, e:
             trace = traceback.format_exc()            
             with self.lock:
                 self.error_msg = "Error : " + str(e) + '\n' + trace
             print trace
-
-        for thread in thread_list:
-            thread.start()
-
-        # collect all running threads
-        for thread in thread_list:            
-            thread.join()
 
 
     def processConvertedBagThread(self, bag_filename, topic_name, num_msgs):
