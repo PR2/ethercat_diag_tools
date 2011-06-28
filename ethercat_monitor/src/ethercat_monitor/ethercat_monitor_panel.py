@@ -1,6 +1,7 @@
 import os
 import wx
 import wx.grid
+import time
 
 from ethercat_monitor.note_edit_dialog import NoteEditDialog
 from ethercat_monitor.wx_util import levelToBackgroundColor
@@ -12,8 +13,10 @@ from ethercat_monitor.wx_util import displayErrorDialog
 from ethercat_monitor.timestep_data import EtherCATHistoryTimestepDataNote
 from ethercat_monitor.ethercat_history_panel import EtherCATHistoryDialog
 from ethercat_monitor.history_plot import HistoryPlotFrame
+from ethercat_monitor.serial_input_dialog import SerialInputDialog
 
-_yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
+_default_save_directory = "/u/wgtest/ethercat_monitor_save/"
+#_yaml_output_directory = "/u/wgtest/ethercat_monitor_yaml/"
 
 # EtherCAT Device Grid
 #                     
@@ -67,6 +70,13 @@ class EtherCATMonitorReaderPanel(wx.Panel):
         panel = self.getCurrentPanel()
         if panel is not None:
             panel.saveBag()
+        else:
+            displayErrorDialog(self, "No history panel selected")
+
+    def saveBagDefault(self):
+        panel = self.getCurrentPanel()
+        if panel is not None:
+            panel.saveBagDefault()
         else:
             displayErrorDialog(self, "No history panel selected")
 
@@ -255,7 +265,7 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
     def getSelectedNote(self):
         index = self.note_listbox.GetSelection()
         if index < 0:
-            displayError(self, "Error", "No note selected to edit")
+            displayErrorDialog(self, "Error", "No note selected to edit")
             return None
         return self.notes[index]        
 
@@ -326,7 +336,36 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
             bag_filename = dlg.GetPath()
             self.history.saveBag(bag_filename)
             print "Saved bag file to ", bag_filename
+        dlg.Destroy()
 
+    def saveBagDefault(self):
+        tsd = self.history.getNewestTimestepData()
+        if tsd is None:
+            displayErrorDialog(self, "No data to save")
+            return
+        dlg = SerialInputDialog(self, self.history.getSerialNumber())
+        serial = dlg.serial
+        result = dlg.ShowModal()
+        dlg.Destroy()
+        if result == wx.ID_OK:
+            self.history.setSerialNumber(dlg.serial)
+            bag_dir = os.path.join(_default_save_directory, dlg.serial)
+            if not os.path.exists(bag_dir):
+                os.mkdir(bag_dir, 0777)
+            timestr = time.strftime("_%a_%b_%d_%I:%M_%p", time.localtime(tsd.getTimestamp().to_sec()))
+            bag_filename = os.path.join(bag_dir, dlg.serial+timestr+'.bag')
+            if os.path.exists(bag_filename):
+                dlg = wx.MessageDialog(None, "Overwrite existing bag?", 'Overwrite?', wx.YES_NO | wx.YES_DEFAULT | wx.ICON_QUESTION )
+                dlg.ShowModal()
+                dlg.Destroy()
+            self.history.saveBag(bag_filename)      
+            dlg = wx.MessageDialog(None, bag_filename, 'Saved bag as', wx.OK)
+            dlg.ShowModal()
+            dlg.Destroy()
+            print "Saved bag file to ", bag_filename
+        else:
+            print "Save canceled"
+            
     def updateTimestampGrid(self, tsd):
         grid = self.timestamp_grid
         grid.SetCellValue(0,0,prettyTimestamp(tsd.getTimestamp()))

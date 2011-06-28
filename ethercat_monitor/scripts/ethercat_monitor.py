@@ -190,6 +190,10 @@ class MainWindow(wx.Frame):
         self.Bind(wx.EVT_MENU, self.onSaveBag, save_bag_menu_item)
         filemenu.AppendItem(save_bag_menu_item)
 
+        save_bag_default_menu_item = wx.MenuItem(filemenu, -1, text="&Save Bag Default", help="Save data to default location")
+        self.Bind(wx.EVT_MENU, self.onSaveBagDefault, save_bag_default_menu_item)
+        filemenu.AppendItem(save_bag_default_menu_item)
+
         open_bag_menu_item = wx.MenuItem(filemenu, -1, text="&Open Bag File", help="Load data from bag file")
         self.Bind(wx.EVT_MENU, self.onLoadBag, open_bag_menu_item)
         filemenu.AppendItem(open_bag_menu_item)
@@ -262,6 +266,17 @@ class MainWindow(wx.Frame):
                 displayErrorDialog(self, "Error occurred while saving bag : " + str(e))
                 traceback.print_exc()
  
+    def onSaveBagDefault(self, event):    
+        panel = self.getCurrentPanel()
+        if panel is None:
+            displayErrorDialog(self, "No tab is selected")
+        else:
+            try : 
+                panel.saveBagDefault()
+            except Exception, e:
+                displayErrorDialog(self, "Error occurred while saving bag : " + str(e))
+                traceback.print_exc()                
+
     def onLoadBag(self, event):
         dlg = wx.FileDialog(self, "Select bag file to load", style= (wx.FD_OPEN | wx.FD_MULTIPLE) )
         if dlg.ShowModal() == wx.ID_OK:        

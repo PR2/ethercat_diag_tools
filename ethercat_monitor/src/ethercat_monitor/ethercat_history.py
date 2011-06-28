@@ -426,6 +426,7 @@ class EtherCATBagReader:
 
 class EtherCATHistory:
     def __init__(self, title, topic_name):
+        self.component_serial_number = ""
         self.title = title
         self.topic_name = topic_name
         self.status_msg = "Starting..."
@@ -457,6 +458,14 @@ class EtherCATHistory:
     def getStatus(self):
         with self.lock:
             return self.status_msg
+
+    def getSerialNumber(self):
+        with self.lock:
+            return self.component_serial_number
+
+    def setSerialNumber(self, serial_number):
+        with self.lock:
+            self.component_serial_number = serial_number
 
     def processAndAddEtherCATSystemMsg(self, system_msg):
         """ Adds system message to history while doing some processing such as drop estimation""" 
