@@ -85,6 +85,7 @@ class EtherCATMonitorReaderPanel(wx.Panel):
         self.history_list.append(history)
         self.panels.append(panel)        
         self.notebook.AddPage(panel, history.getTitle())
+        self.notebook.ChangeSelection(len(self.panels)-1)
 
     def getCurrentPanel(self):
         index = self.notebook.GetSelection()
