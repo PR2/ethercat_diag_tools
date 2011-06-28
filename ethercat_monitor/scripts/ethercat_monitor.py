@@ -78,15 +78,13 @@ def usage(progname):
     print __doc__ % vars()    
 
 # TODO :
-#  Way to select/create notes from history
-#  Better way of chosing events from notes or history
 #  Better way of displaying old/new timestamp data in history
 #  Highlighting color for status (Error Warn)
-#  Method of saving/loading both notes and history from bag file
+#  Highlighting color for tab base on drops or lost links
 #  Unit tests
-#  Way to create plot of dropped/late packets
-#  Allow bagfiles with different topics to create multiple tabs (do bag yaml pre-processing in thread
+#  Way to create differential plot of dropped/late packets
 #  Have bag processor die when ethercat monitor quits
+#  Auto-generate note when link loss or multiple drops occurs within certain period 
 
 class TimestampSelect(wx.Panel):
     def __init__(self,parent,name):
