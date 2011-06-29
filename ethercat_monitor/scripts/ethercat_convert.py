@@ -60,6 +60,7 @@ import time
 import sys 
 import os
 import getopt
+import yaml
 
 from ethercat_monitor.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDeviceAddDiag
 from ethercat_monitor.ethercat_master_diag import EtherCATMasterDiag
@@ -76,6 +77,34 @@ def convert(inbag_filename, outbag_filename, interval):
     target_time = None
 
     inbag = rosbag.Bag(inbag_filename)
+    y = yaml.load(inbag._get_yaml_info())
+    if 'topics' not in y:
+        print "Bag file is empty or not indexed"
+        return
+
+    # In some cases the 'diagnostics' data can be recorded as some topic other than '/diagnostics' 
+    # One example would the the burn-in test stations where the diagnostics topic 
+    # is prepended with the teststation name (for example /testc/diagnostics )
+    # For these cases its better to look for the topic with the right message type (DiagnosticsArray)
+    diagnostic_topics = [ ]
+    for topic_info in y['topics']:
+        topic_name = topic_info['topic']
+        topic_type = topic_info['type']
+        if topic_type == 'diagnostic_msgs/DiagnosticArray':
+            diagnostic_topics.append( ( topic_name, topic_type ) )
+
+    if len(diagnostic_topics) == 0:
+        print "Bag file does not contain any diagnostics"
+        return 
+
+    if len(diagnostic_topics) > 1:
+        print "Can not handle than 1 diagnostics topic is a single bag file."
+        print "Bag file contains the following diagnostic topcis:"
+        for topic_name,topic_type in diagnostic_topics:
+            print "  ", topic_name
+
+    diagnostic_topic_name = diagnostic_topics[0][0]
+
     outbag = rosbag.Bag(outbag_filename, 'w', compression=rosbag.Compression.BZ2)
 
     device_diag_map = {}
@@ -86,7 +115,7 @@ def convert(inbag_filename, outbag_filename, interval):
     total = 0
     used = 0
 
-    for topic, msg, t in inbag.read_messages(topics=['diagnostics','/diagnostics']):
+    for topic, msg, t in inbag.read_messages(topics=[diagnostic_topic_name]):
         system = None
         for status in msg.status:
             if status.name in device_diag_map:
@@ -114,7 +143,7 @@ def convert(inbag_filename, outbag_filename, interval):
             if target_time is None:
                 target_time = msg.header.stamp
             if msg.header.stamp >= target_time:
-                system.header = msg.header
+                system.stamp = msg.header.stamp
                 outbag.write('ethercat_system_status', system, t=t)
                 target_time += interval
                 used+=1
