@@ -167,7 +167,7 @@ class TopicSelectDialog(wx.Dialog):
 
 
 class MainWindow(wx.Frame):
-    def __init__(self, reader):
+    def __init__(self, readers):
         wx.Frame.__init__(self, None, -1, "EtherCAT Monitor")
 
         self.notebook = wx.Notebook(self)
@@ -176,7 +176,8 @@ class MainWindow(wx.Frame):
 
         self.panels = []
 
-        self.addPanel(reader)
+        for reader in readers:
+            self.addPanel(reader)
 
         # Setting up the menu.
         filemenu= wx.Menu()
@@ -312,14 +313,15 @@ def main(argv):
 
     rospy.init_node('ethercat_monitor', anonymous=True)
     
-    if len(argv) == 1:
-        bag_filename = argv[0]
-        reader = EtherCATBagReader(bag_filename)
+    readers = []
+    if len(argv) >= 1:
+        for bag_filename in argv:
+            readers.append(EtherCATBagReader(bag_filename))
     else:
-        reader = EtherCATSubscriber('/diagnostics')
+        readers.append(EtherCATSubscriber('/diagnostics'))
 
     app = wx.PySimpleApp()
-    MainWindow(reader)
+    MainWindow(readers)
     app.MainLoop()
 
     return 0

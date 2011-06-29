@@ -253,6 +253,9 @@ class EtherCATBagReader:
 
             # first look at bag file to determine what topic has diagnostic_msgs/DiagnosticArray type
             y = yaml.load(bag._get_yaml_info())
+            if 'topics' not in y:
+                raise RuntimeError("Bag file is empty or not indexed")
+
             diagnostic_topics = [ ]
             header_topics = [ ]
             note_topics = [ ]
@@ -270,7 +273,7 @@ class EtherCATBagReader:
                 elif topic_type == 'ethercat_monitor/EtherCATSystemStatus':
                     system_topics.append( (topic_name, num_msgs) )
                 else:
-                    print "Bag contains topic '%s' with unknown message type : " % (topic_name, topic_type)
+                    print "Bag contains topic '%s' with unknown message type : %s" % (topic_name, topic_type)
 
             bag.close()
 
