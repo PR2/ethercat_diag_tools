@@ -57,14 +57,17 @@ class DiagEventFormatError(Exception):
         return self.desc
 
 class DiagEvent(object):
-    def __init__(self, type, name, t, desc, hide=False, children=[]):
+    def __init__(self, type, name, t, desc, hide=False, children=None):
         self.type = type     # event type / event class
         self.name = name     # component name
         self.t = t           # start-time of event 
         self.desc = desc     # description of event
         self.hide = hide     # hide event
         self.data = {}       # map for extra data
-        self.children = children # events caused by this error
+        if children is None:
+            self.children = []
+        else:
+            self.children = children # events caused by this error
     def short_desc(self):
         """ Return short description of event. """
         return self.desc
@@ -121,10 +124,11 @@ class DiagEvent(object):
             raise DiagEventFormatError('data must be dict, got %s' % type(data_yaml).__name__)
         children = []
         for child_yaml in children_yaml:
-            children.append(from_yaml(child_yaml))
+            children.append(DiagEvent.from_yaml(child_yaml))
         t = DiagEvent.time_from_yaml(yaml['time'])
-        return DiagEvent(yaml['type'],yaml['name'],t,desc,hide,children)
-
+        new_event = DiagEvent(yaml['type'],yaml['name'],t,desc,hide,children)
+        new_event.data = data_yaml
+        return new_event
 
     def __str__(self):
         timestr = time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(self.t.to_sec()))

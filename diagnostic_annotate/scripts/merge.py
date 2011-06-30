@@ -7,48 +7,10 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
+from diagnostic_annotate.event_tools import StartAndStopCache, sortEvents
 
 import sys
 import yaml
-
-def saturate(index, minval, maxval):
-    if index < minval:
-        return minval
-    if index > maxval:
-        return maxval
-    return index
-
-
-def getTimeIndex(t, events, hint):
-    index = hint
-    index = saturate(index, 0, len(events))
-    while (index<len(events)) and (events[index].t < t) :
-        index += 1
-    index = saturate(index, 0, len(events))
-    while (index>=0) and (events[index].t > t) :
-        index -= 1
-    index = saturate(index, 0, len(events))
-    return index
-
-
-def getEventIndexRange(events, start_time, stop_time, start_hint=0, stop_hint=0):
-    """ Returns an iterator of all events in <event_list> 
-    that occur a ceratin time <before>, or a certain time <after> an certain <event> """
-    start_index = getTimeIndex(start_time, events, start_hint)
-    stop_index   = getTimeIndex(stop_time,  events, stop_hint)
-    return (start_index, stop_index)
-
-
-class StartAndStopCache(object):
-    def __init__(self):
-        self.start_index = 0
-        self.stop_index  = 0
-
-    def getEventIndexRange(self, events, start_time, stop_time):
-        start_index,stop_index =  getEventIndexRange(events, start_time, stop_time, self.start_index, self.stop_index)
-        self.start_index,self.stop_index = (start_index,stop_index)
-        return (start_index,stop_index)
-
 
 class RunstopMerge(object):
     """ Merge Runstop and undervoltage events into one """
@@ -56,9 +18,12 @@ class RunstopMerge(object):
         pass
 
     def process(self,events):
+        if len(events) == 0:
+            return []
+
         index_cache = StartAndStopCache()
-        before = rospy.Duration(100.0)
-        after = rospy.Duration(100.0)
+        before = rospy.Duration(10.0)
+        after = rospy.Duration(10.0)
 
         for current_event in events:
             if current_event.type == "RunStopEvent":
@@ -67,11 +32,12 @@ class RunstopMerge(object):
                 stop_time  = current_event.t + after    
                 (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
                 for event in events[start_index:stop_index]:
-                    if (not event.hide) and (event.type == "UndervoltageLockoutEvent"):
-                        print " Runstop Merge", event
-                        event.hide = True
-                        current_event.children.append(event)
-            
+                    if  (event.type == "UndervoltageLockoutEvent") or (event.type == "UndervoltageLockoutMerge"):
+                        if (not event.hide):
+                            print " Runstop Merge", event
+                            event.hide = True
+                            current_event.children.append(event)
+
         results = []
         for event in events:
             if not event.hide:
@@ -85,31 +51,36 @@ class UndervoltageMerge(object):
         pass
 
     def process(self,events):
+        if len(events) == 0:
+            return []
+
+        new_events = []
+
         index_cache = StartAndStopCache()
         before = rospy.Duration(1.0)
-        after = rospy.Duration(3.0)
+        after = rospy.Duration(2.0)
 
         for current_event in events:
             if (current_event.type == "UndervoltageLockoutEvent") and (not current_event.hide):
-                print "Undervoltage Merge", current_event
+                new_event = DiagEvent('UndervoltageLockoutMerge', '<MERGE>', current_event.t, "")
                 start_time = current_event.t - before
                 stop_time  = current_event.t + after    
                 (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
-                uv_count = 1
+                uv_count = 0
                 for event in events[start_index:stop_index]:
-                    if (not event.hide) and (event.type == "UndervoltageLockoutEvent") and (event is not current_event):
+                    if (not event.hide) and (event.type == "UndervoltageLockoutEvent"):
                         uv_count += 1
-                        print " UV Merge", event
                         event.hide = True
-                        #current_event.children.append(event)
-                current_event.name = "%d devices" % uv_count
-
-            
-        results = []
+                        new_event.children.append(event)
+                new_event.desc = "Merge of %d devices" % uv_count
+                new_events.append(new_event)
+                print "  %d children", len(new_event.children)
+                #current_event.name = "%d devices" % uv_count
+        
+        results = new_events
         for event in events:
             if not event.hide:
                 results.append(event)
-
         return results
 
 
@@ -141,14 +112,19 @@ def main(argv):
     yaml_events = y['events']
     events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
 
-    events = UndervoltageMerge().process(events)
-    events = RunstopMerge().process(events)
     events = RemoveEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'GenericEvent']).process(events)
+    events = sortEvents(events)
+    events = UndervoltageMerge().process(events)
+    events = sortEvents(events)
+    #events = RunstopMerge().process(events)
+    #events = sortEvents(events)
     
     yaml_events = [ event.to_yaml() for event in events ]
+    y['events'] = yaml_events
+    y['merged'] = True
 
     fd = open(output_filename,'w')
-    yaml.dump(yaml_events,stream=fd)
+    yaml.dump(y,stream=fd)
     fd.close()
 
     return 0

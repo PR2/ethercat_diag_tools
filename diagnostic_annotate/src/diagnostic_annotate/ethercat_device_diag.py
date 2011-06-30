@@ -64,7 +64,7 @@ def rx_error_event(name, t, port, rx_errors, invalid_frames):
 def lost_link_event(name, t, port, lost_links):
     """ Represents lost link on specific port of an EtherCAT device"""
     evt =  DiagEvent('LostLink', name, t, "%d lost links on port %d" % (lost_links, port))
-    evt.data = {'port' : port, 'rx_errors' : lost_links}
+    evt.data = {'port' : port, 'lost_links' : lost_links}
     return evt
 
 def motor_model_error(name, t):
