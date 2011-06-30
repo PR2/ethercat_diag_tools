@@ -51,9 +51,9 @@ def safety_disable_event(name, t, desc):
     """ Represents any type of EtherCAT device safety disable """
     return DiagEvent('SafetyDisableEvent', name, t, desc)
 
-def undervoltage_lockout_event(name, t, desc):
+def undervoltage_lockout_event(name, t):
     """ Represents undervoltage lockout of EtherCAT device """
-    return DiagEvent('UndervoltageLockoutEvent', name, t, desc)
+    return DiagEvent('UndervoltageLockoutEvent', name, t, "undervoltage lockout")
 
 def rx_error_event(name, t, port, rx_errors, invalid_frames):
     """ Represents RX errors or invalid frames on specific port of an EtherCAT device"""
@@ -232,7 +232,7 @@ class WGEtherCATDeviceDiag(EtherCATDeviceDiag):
 
         if (new.safety_disable_status_hold.compare(old.safety_disable_status_hold)):
             if (new.safety_disable_status_hold.just_undervoltage()):
-                event_list.append(undervoltage_lockout_event(name, t, "undervoltage lockout"))
+                event_list.append(undervoltage_lockout_event(name, t))
             else:
                 event_list.append(generic_event(name, t, "safety disable status changed to %s" % (new.safety_disable_status_hold.to_str())))
 
