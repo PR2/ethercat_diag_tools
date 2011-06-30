@@ -59,10 +59,58 @@ import yaml
 import sys
 import getopt
 import time
+import math
+
+def displayErrorDialog(parent, message):
+    dlg = wx.MessageDialog(parent, message, caption="Error", style=(wx.OK | wx.CENTRE | wx.ICON_ERROR))
+    dlg.ShowModal()
+    dlg.Destroy()  
+
+
+def pretty_duration(duration):    
+    is_negative = False
+    is_now = False 
+    if math.fabs(duration) < 60.0:
+        return "%.2f secs " % duration
+        
+    if (duration < 0):
+        duration = -duration
+        is_negative = True
+
+    secs_per_min  = 60.0
+    secs_per_hour = secs_per_min * 60.0
+    secs_per_day  = secs_per_hour * 24.0
+
+    days = math.floor(duration / secs_per_day)
+    duration -= days * secs_per_day
+    hours = math.floor(duration / secs_per_hour)
+    duration -= hours * secs_per_hour
+    mins = math.floor(duration / secs_per_min)
+    duration -= mins * secs_per_min
+    result = ""
+    if days > 0:    
+        result += ("%d d "%(days))
+    if hours > 0:
+        result += ("%d h "%(hours))
+    if mins > 0:
+        result += ("%d m "%(mins))
+    if len(result) > 0:
+        result += "and "
+    result += "%.2f sec " % math.floor(duration)
+
+    if is_negative:
+        result =  "-" + result
+    else:
+        result = "+" + result
+    return result
+
 
 class MainWindow(wx.Frame):
     def __init__(self, events):
         wx.Frame.__init__(self, None, -1, "Event Viewer")
+
+        self.events = events
+        self.current_selection = -1
 
         # Setting up the menu.
         filemenu= wx.Menu()
@@ -76,19 +124,28 @@ class MainWindow(wx.Frame):
         menuBar.Append(filemenu,"&File") 
         self.SetMenuBar(menuBar)  
 
+        self.set_ref_button = wx.Button(self, -1, "Set Ref Time")
+        self.Bind(wx.EVT_BUTTON, self.onSetReferenceTime, self.set_ref_button)
+
+        # button bar
+        hsizer = wx.BoxSizer(wx.HORIZONTAL)       
+        hsizer.Add(self.set_ref_button, 0, wx.EXPAND)
+
         grid = wx.grid.Grid(self)
         self.grid = grid
+        self.Bind(wx.grid.EVT_GRID_SELECT_CELL, self.onSelectGridCell, self.grid)
 
-        num_cols = 7
+        num_cols = 8
         grid.CreateGrid(0,num_cols)
 
-        grid.SetColLabelValue(0, "Date")
-        grid.SetColLabelValue(1, "Time")
-        grid.SetColLabelValue(2, "Event\nType")
-        grid.SetColLabelValue(3, "Component\nName");
-        grid.SetColLabelValue(4, "Num/Children")
-        grid.SetColLabelValue(5, "Description")
-        grid.SetColLabelValue(6, "Data")
+        grid.SetColLabelValue(0, "Relative\nTime")
+        grid.SetColLabelValue(1, "Date")
+        grid.SetColLabelValue(2, "Time")
+        grid.SetColLabelValue(3, "Event\nType")
+        grid.SetColLabelValue(4, "Component\nName");
+        grid.SetColLabelValue(5, "Num\nChildren")
+        grid.SetColLabelValue(6, "Description")
+        grid.SetColLabelValue(7, "Data")
 
         #header_grid.SetRowLabelSize(0) # hide the row labels
         grid.SetRowLabelSize(0) # hide the row labels
@@ -99,7 +156,7 @@ class MainWindow(wx.Frame):
         grid.EnableDragGridSize(False)
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
-        #vsizer.Add(self.header_grid, 0, wx.EXPAND)
+        vsizer.Add(hsizer, 0, wx.EXPAND)
         vsizer.Add(self.grid, 1, wx.EXPAND)
 
         vsizer.SetMinSize((1200,600))
@@ -117,14 +174,17 @@ class MainWindow(wx.Frame):
             time_str = time.strftime("%I:%M.%S %p", localtime)
             date_str = time.strftime("%a, %b %d %Y", localtime)
 
-            grid.SetCellValue(row,0,date_str)
-            grid.SetCellValue(row,1,time_str)
-            grid.SetCellValue(row,2,event.type)
-            grid.SetCellValue(row,3,event.name)
-            grid.SetCellValue(row,4,str(len(event.children)))
-            grid.SetCellValue(row,5,event.desc)
-            grid.SetCellValue(row,6,str(event.data))
+            grid.SetCellValue(row,1,date_str)
+            grid.SetCellValue(row,1,date_str)
+            grid.SetCellValue(row,2,time_str)
+            grid.SetCellValue(row,3,event.type)
+            grid.SetCellValue(row,4,event.name)
+            grid.SetCellValue(row,5,str(len(event.children)))
+            grid.SetCellValue(row,6,event.desc)
+            grid.SetCellValue(row,7,str(event.data))
         
+        self.setReferenceTime(events[0])
+
         grid.AutoSizeColumns()
 
         self.SetSizer(vsizer)
@@ -132,6 +192,27 @@ class MainWindow(wx.Frame):
         vsizer.Fit(self)
 
         self.Show(True)
+
+    def onSelectGridCell(self, event):
+        self.current_selection = event.GetRow()
+        #print "current selection = ", self.current_selection
+        event.Skip()
+
+    def onSetReferenceTime(self, event):
+        if self.current_selection >= 0:
+            event = self.events[self.current_selection]
+            self.setReferenceTime(event)
+        else:
+            displayErrorDialog(self, "Please select a cell from a given row")
+
+    def setReferenceTime(self, ref_event):
+        grid = self.grid
+        reft = ref_event.t
+        for row,event in enumerate(self.events):
+            duration_str = pretty_duration((event.t-reft).to_sec())
+            grid.SetCellValue(row,0,duration_str)
+        grid.AutoSizeColumns()
+
 
     def onQuit(self, event):
         self.Close(True)
