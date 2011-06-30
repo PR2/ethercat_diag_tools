@@ -70,16 +70,16 @@ def usage(progname):
     print __doc__ % vars()    
 
 
-def convert(inbag_filename, outbag_filename, interval):
-    if not os.path.isfile(inbag_filename):
-        raise RuntimeError("Cannot locate input bag file %s" % inbag_filename)
-    
+def convert(inbag_filename, outbag_filename, interval):        
     target_time = None
 
     inbag = rosbag.Bag(inbag_filename)
+
+
     y = yaml.load(inbag._get_yaml_info())
     if 'topics' not in y:
         print "Bag file is empty or not indexed"
+        inbag.close()
         return
 
     # In some cases the 'diagnostics' data can be recorded as some topic other than '/diagnostics' 
@@ -95,6 +95,7 @@ def convert(inbag_filename, outbag_filename, interval):
 
     if len(diagnostic_topics) == 0:
         print "Bag file does not contain any diagnostics"
+        inbag.close()
         return 
 
     if len(diagnostic_topics) > 1:
@@ -102,10 +103,13 @@ def convert(inbag_filename, outbag_filename, interval):
         print "Bag file contains the following diagnostic topcis:"
         for topic_name,topic_type in diagnostic_topics:
             print "  ", topic_name
+        inbag.close()
+        return
 
-    diagnostic_topic_name = diagnostic_topics[0][0]
 
     outbag = rosbag.Bag(outbag_filename, 'w', compression=rosbag.Compression.BZ2)
+
+    diagnostic_topic_name = diagnostic_topics[0][0]
 
     device_diag_map = {}
     master_diag     = EtherCATMasterDiag()
@@ -150,8 +154,8 @@ def convert(inbag_filename, outbag_filename, interval):
 
         
     print "used %d of %d messages" % (used, total)
-    outbag.close()
     inbag.close()
+    outbag.close()
 
 
 def main(argv):
@@ -168,14 +172,17 @@ def main(argv):
             print "Internal error : unhandled option '%s'"%opt
             return 1
     
-    if len(argv) == 2:
-        inbag_filename = argv[0]
-        outbag_filename = argv[1]
-        convert(inbag_filename, outbag_filename, interval)
-    else:
+    if len(argv) != 2:
         usage(progname)
         return 1
 
+    inbag_filename = argv[0]
+    outbag_filename = argv[1]
+    if not os.path.isfile(inbag_filename):
+        print "Cannot locate input bag file %s" % inbag_filename
+        return 1
+
+    convert(inbag_filename, outbag_filename, interval)
     return 0
 
 
