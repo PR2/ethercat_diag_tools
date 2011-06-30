@@ -39,10 +39,9 @@
 ##\brief Annotates errors in diagnostic bag files.
 
 """
-Usage: %(progname)s [-h] <bagfile1> [<bagfile2> ...]
-  Goes through diagnostics in <bagfile>s and annotates error events.
-  Save events in yaml file in current diretory.
-  If the bagfile is named 'name.bag' the yaml output will be named 'name.bag.yaml'
+Usage: %(progname)s [-h] <input bagfile> <output bagfile>
+  Goes through diagnostics in <input bagfile> and annotates error events 
+  and outputs results to <output_bagfile>
 
 Options:
   -h : show this help
@@ -135,15 +134,22 @@ class PrintEvents:
             print '   ', event.short_desc()
 
 
-def process_bag(inbag_filename, diag_list, diag_map):
-    print
+def process_bag(inbag_filename, output_filename):
+    diag_list = []
+    diag_map = {}
+
+    EtherCATMasterDiag(diag_map)
+    RealtimeControlLoopDiag(diag_map)
+    EtherCATDeviceAddDiag(diag_list, diag_map)
+    PowerBoardAddDiag(diag_list, diag_map)
+
     if not os.path.isfile(inbag_filename): 
         raise RuntimeError("Cannot locate input bag file %s" % inbag_filename)
 
-    output_filename = os.path.basename(inbag_filename) + '.yaml'
-    if os.path.isfile(output_filename):
-        print >>sys.stderr, "Skipping", inbag_filename
-        return
+    #output_filename = os.path.basename(inbag_filename) + '.yaml'
+    #if os.path.isfile(output_filename):
+    #    print >>sys.stderr, "Skipping", inbag_filename
+    #    return
 
     bag = rosbag.Bag(inbag_filename)
     print bag
@@ -202,28 +208,13 @@ def main(argv):
             print "Internal error : unhandled option '%s'"%opt
             return 1
 
-    if len(argv) == 0:
+    if len(argv) != 2:
       usage(progname)
       return 1
 
-    for inbag_filename in argv:
-
-        diag_list = []
-        diag_map = {}
-
-        EtherCATMasterDiag(diag_map)
-        RealtimeControlLoopDiag(diag_map)
-        EtherCATDeviceAddDiag(diag_list, diag_map)
-        PowerBoardAddDiag(diag_list, diag_map)
-
-        try:
-            process_bag(inbag_filename, diag_list, diag_map)
-        except KeyboardInterrupt:
-            print "Keyboard Interrupt, quiting"
-            break
-        except Exception,e:
-            print traceback.print_exc()
-            print "Error annotating bag %s : %s" % (inbag_filename, str(e))
+    inbag_filename = argv[0]
+    output_filename = argv[1]    
+    process_bag(inbag_filename, output_filename)
 
     # Use 30 second reordering buffer.
     #reorder = EventDelay(30.0, True)    
