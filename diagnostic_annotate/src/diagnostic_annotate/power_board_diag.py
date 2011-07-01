@@ -46,9 +46,26 @@ from diagnostic_annotate.diag_event import DiagEvent, generic_event
 
 import re
         
-def runstop_event(name, t, desc):
+def bool2TF(b):
+    """ Converts boolean value to 'T' or 'F' """
+    return 'T' if b else 'F'
+
+def boolChangeStr(old, new):
+    """ Converts two booleans into <old>-><new>    
+    examples :  
+       True,False  ==>   'T->F'
+       False,False  ==>  'F->F'
+    """
+    return bool2TF(old) + '->' + bool2TF(new) 
+
+
+def runstop_event(name, t, old, new):
     """ Represents Run-Stop being pressed. """
-    return DiagEvent('RunStopEvent', name, t, desc)
+    desc = "Runstop"  #, Button=%s Wireless=%s" % (str(new.runstop_button_status), str(new.runstop_wireless_status))
+    event = DiagEvent('RunStopEvent', name, t, desc)
+    event.data['runstop_button']   = boolChangeStr(old.runstop_button_status,   new.runstop_button_status)
+    event.data['runstop_wireless'] = boolChangeStr(old.runstop_wireless_status, new.runstop_wireless_status)
+    return event
 
 
 def circuit_breaker_trip(name, t, circuit_breaker_num, new_trip_count, old_trip_count):
@@ -100,8 +117,7 @@ class PowerBoardDiag:
         new_runstop_status = new.runstop_button_status and new.runstop_wireless_status
         
         if not new_runstop_status and self.old_runstop_status:
-            desc = "Runstop" #Button=%s Wireless=%s" % (str(new.runstop_button_status), str(new.runstop_wireless_status))
-            event_list.append(runstop_event(name, t, desc))            
+            event_list.append(runstop_event(name, t, old, new))            
 
         for i in range(3):
             if new.trip_count[i] != old.trip_count[i]:

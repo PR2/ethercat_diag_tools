@@ -48,8 +48,6 @@ class RunstopMerge(object):
 
         return results
 
-
-
 class UndervoltageMerge(object):
     """ Merge Undervoltage events for different devices into one """
     def __init__(self):
@@ -87,6 +85,32 @@ class UndervoltageMerge(object):
                 results.append(event)
         return results
 
+
+class MultiRunstopMerge(object):
+    """ Find Runstops that occur multiple times in succession"""
+    def __init__(self):
+        pass
+
+    def process(self,events):
+        last_runstop = None
+        new_events = []
+        for event in events:
+            if event.type == "RunStopEvent":
+                new_runstop = event
+                if last_runstop is not None:
+                    if abs((new_runstop.t - last_runstop.t).to_sec()) < 10:
+                        print "Multi Runstop Merge"
+                        new_event = DiagEvent('MultiRunstopMerge', '<>', last_runstop.t, "")
+                        new_event.children = [last_runstop, event]     
+                        last_runstop.hide = True
+                        new_runstop.hide = True
+                        new_events.append(new_event)
+                last_runstop = new_runstop
+                
+        for event in events:
+            if not event.hide:
+                new_events.append(event)
+        return  new_events
 
 
 class IntervalMerge(object):
@@ -144,15 +168,17 @@ class RemoveEventTypes(object):
 
 def runFilters(filters, events):
     """ Run a list of filters on events """
-    events = sortEvents(events)
     for f in filters:
         #print class(f)
         if len(events) == 0:
             print "No events"
             return []
-        events = f.process(events)
+        for event in events:
+            event.hide = False
         events = sortEvents(events)
-
+        events = f.process(events)
+    
+    events = sortEvents(events)
     return events
 
         
@@ -162,5 +188,6 @@ def filterPipeline1(events):
     filters.append( RemoveEventTypes(['RxError', 'DroppedPacket', 'LatePacket']) )
     filters.append( UndervoltageMerge() )
     filters.append( RunstopMerge() )
+    filters.append( MultiRunstopMerge() )
     filters.append( IntervalMerge(12.0) )
     return runFilters(filters,events)
