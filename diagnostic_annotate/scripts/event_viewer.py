@@ -93,19 +93,20 @@ def pretty_duration(duration):
     if hours > 0:
         result += ("%d h "%(hours))
     if mins > 0:
-        result += ("%d m "%(mins))
+        result += ("%d m"%(mins))
     if len(result) > 0:
-        result += "and "
-    result += "%.2f sec " % math.floor(duration)
+        result += " "
+    result += "%.2f s " % duration
 
     if is_negative:
-        result =  "-" + result
+        result =  "- " + result
     else:
-        result = "+" + result
+        result = "+ " + result
     return result
 
 
-class MainWindow(wx.Frame):
+
+class EventViewerFrame(wx.Frame):
     def __init__(self, events):
         wx.Frame.__init__(self, None, -1, "Event Viewer")
 
@@ -126,10 +127,13 @@ class MainWindow(wx.Frame):
 
         self.set_ref_button = wx.Button(self, -1, "Set Ref Time")
         self.Bind(wx.EVT_BUTTON, self.onSetReferenceTime, self.set_ref_button)
+        self.view_children_button = wx.Button(self, -1, "View Children")
+        self.Bind(wx.EVT_BUTTON, self.onViewChildren, self.view_children_button)
 
         # button bar
         hsizer = wx.BoxSizer(wx.HORIZONTAL)       
         hsizer.Add(self.set_ref_button, 0, wx.EXPAND)
+        hsizer.Add(self.view_children_button, 0, wx.EXPAND)
 
         grid = wx.grid.Grid(self)
         self.grid = grid
@@ -143,7 +147,7 @@ class MainWindow(wx.Frame):
         grid.SetColLabelValue(2, "Time")
         grid.SetColLabelValue(3, "Event\nType")
         grid.SetColLabelValue(4, "Component\nName");
-        grid.SetColLabelValue(5, "Num\nChildren")
+        grid.SetColLabelValue(5, "Total\nChildren")
         grid.SetColLabelValue(6, "Description")
         grid.SetColLabelValue(7, "Data")
 
@@ -173,13 +177,14 @@ class MainWindow(wx.Frame):
             localtime = time.localtime(event.t.to_sec())
             time_str = time.strftime("%I:%M.%S %p", localtime)
             date_str = time.strftime("%a, %b %d %Y", localtime)
+            child_count = EventViewerFrame.sumChildren(event)
 
             grid.SetCellValue(row,1,date_str)
             grid.SetCellValue(row,1,date_str)
             grid.SetCellValue(row,2,time_str)
             grid.SetCellValue(row,3,event.type)
             grid.SetCellValue(row,4,event.name)
-            grid.SetCellValue(row,5,str(len(event.children)))
+            grid.SetCellValue(row,5,str(child_count))
             grid.SetCellValue(row,6,event.desc)
             grid.SetCellValue(row,7,str(event.data))
         
@@ -191,7 +196,16 @@ class MainWindow(wx.Frame):
         self.SetAutoLayout(1)
         vsizer.Fit(self)
 
+        self.current_selection = -1
+
         self.Show(True)
+
+    @staticmethod
+    def sumChildren(event):
+        sum = 0
+        for child in event.children:
+            sum += 1 + EventViewerFrame.sumChildren(child)
+        return sum
 
     def onSelectGridCell(self, event):
         self.current_selection = event.GetRow()
@@ -199,11 +213,11 @@ class MainWindow(wx.Frame):
         event.Skip()
 
     def onSetReferenceTime(self, event):
-        if self.current_selection >= 0:
+        if self.current_selection < 0:
+            displayErrorDialog(self, "Please select a cell from a given row")
+        else:
             event = self.events[self.current_selection]
             self.setReferenceTime(event)
-        else:
-            displayErrorDialog(self, "Please select a cell from a given row")
 
     def setReferenceTime(self, ref_event):
         grid = self.grid
@@ -213,6 +227,20 @@ class MainWindow(wx.Frame):
             grid.SetCellValue(row,0,duration_str)
         grid.AutoSizeColumns()
 
+    def onViewChildren(self, event):
+        if self.current_selection < 0:
+            displayErrorDialog(self, "Please select a cell from a given row")
+        else:
+            #print "current selection = ", self.current_selection
+            event = self.events[self.current_selection]
+            if len(event.children) == 0:
+                displayErrorDialog(self, "Event has no children")
+            else:
+                viewer = EventViewerFrame(event.children)
+                #viewer.SetSize(wx.Size(600, 600))
+                #viewer.Layout()
+                #viewer.Show(True)
+                viewer.Raise()
 
     def onQuit(self, event):
         self.Close(True)
@@ -249,7 +277,7 @@ def main(argv):
 
 
     app = wx.PySimpleApp()
-    MainWindow(events)
+    EventViewerFrame(events)
     app.MainLoop()
 
     return 0
