@@ -32,8 +32,17 @@ class RunstopMerge(object):
                 stop_time  = current_event.t + after    
                 (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
                 for event in events[start_index:stop_index]:
-                    if  (event.type == "UndervoltageLockoutEvent") or (event.type == "UndervoltageLockoutMerge"):
-                        if (not event.hide):
+                    if (not event.hide):
+                        if (event.type == "UndervoltageLockoutEvent") or (event.type == "UndervoltageLockoutMerge"):
+                            print " Runstop Merge", event
+                            event.hide = True
+                            current_event.children.append(event)
+                        if event.type == "CircuitBreakerTrip":
+                            print " Runstop Merge", event
+                            event.hide = True
+                            current_event.children.append(event)
+                            current_event.data['breaker_trip'] = True
+                        if event.type == "OnlyMotorHaltedEvent":
                             print " Runstop Merge", event
                             event.hide = True
                             current_event.children.append(event)
@@ -74,7 +83,6 @@ class UndervoltageMerge(object):
                         new_event.children.append(event)
                 new_event.desc = "Merge of %d devices" % uv_count
                 new_events.append(new_event)
-                print "  %d children", len(new_event.children)
                 #current_event.name = "%d devices" % uv_count
         
         results = new_events
@@ -84,11 +92,47 @@ class UndervoltageMerge(object):
         return results
 
 
+class IntervalMerge(object):
+    """ Merges that occur within certain time of each other into IntervalGroup. """
+    def __init__(self, interval_break):
+        """ interval break is the min of seconds between two events before a new interval is created """
+        self.interval_break = interval_break
+
+    @staticmethod
+    def genInterval(event):    
+        interval_event =  DiagEvent('IntervalMerge', '<interval>', event.t, "")
+        interval_event.children.append(event)
+        return interval_event
+
+    @staticmethod
+    def finalizeInterval(results, interval):
+        """ If interval only has one child, just add child to results not interval"""
+        if len(interval.children) == 1:
+            #print "Single element Interval", interval.children[0]
+            results.append(interval.children[0])
+        else:
+            #print "Interval with %d children" % len(interval.children)
+            results.append(interval)
+        
+    def process(self, events):
+        results = []
+        interval = IntervalMerge.genInterval(events[0])
+        for event in events[1:]:
+            if abs( (interval.t-event.t).to_sec() ) < self.interval_break:
+                interval.children.append(event)
+            else:                
+                IntervalMerge.finalizeInterval(results, interval)
+                interval = IntervalMerge.genInterval(event)
+
+        IntervalMerge.finalizeInterval(results, interval)
+        return results
+
+
+
 class RemoveEventTypes(object):
-    """ Merge Runstop and undervoltage events into one """
+    """ Remove certain Event types from list """
     def __init__(self, event_types):
         self.event_types = set(event_types)
-        pass
 
     def process(self,events):
         results = []
@@ -111,14 +155,17 @@ def main(argv):
     
     yaml_events = y['events']
     events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
-
+   
+    events = sortEvents(events)
     events = RemoveEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'GenericEvent']).process(events)
     events = sortEvents(events)
     events = UndervoltageMerge().process(events)
     events = sortEvents(events)
-    #events = RunstopMerge().process(events)
-    #events = sortEvents(events)
-    
+    events = RunstopMerge().process(events)
+    events = sortEvents(events)
+    events = IntervalMerge(12.0).process(events)
+    events = sortEvents(events)    
+
     yaml_events = [ event.to_yaml() for event in events ]
     y['events'] = yaml_events
     y['merged'] = True
