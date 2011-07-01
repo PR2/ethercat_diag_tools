@@ -52,6 +52,7 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
+from diagnostic_annotate.merge_filters import filterPipeline1
 
 import wx
 import wx.grid
@@ -275,6 +276,7 @@ def main(argv):
     yaml_events = y['events']
     events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
 
+    events = filterPipeline1(events)
 
     app = wx.PySimpleApp()
     EventViewerFrame(events)
