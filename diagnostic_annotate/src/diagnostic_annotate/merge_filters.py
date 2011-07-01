@@ -147,6 +147,9 @@ def runFilters(filters, events):
     events = sortEvents(events)
     for f in filters:
         #print class(f)
+        if len(events) == 0:
+            print "No events"
+            return []
         events = f.process(events)
         events = sortEvents(events)
 

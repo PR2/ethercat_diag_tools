@@ -160,15 +160,6 @@ class EventViewerFrame(wx.Frame):
 
         grid.EnableDragGridSize(False)
 
-        vsizer = wx.BoxSizer(wx.VERTICAL)
-        vsizer.Add(hsizer, 0, wx.EXPAND)
-        vsizer.Add(self.grid, 1, wx.EXPAND)
-
-        vsizer.SetMinSize((1200,600))
-
-        self.SetSizer(vsizer)
-        self.SetAutoLayout(1)
-        #self.SetupScrolling()
 
         grid.AppendRows(len(events))
         for row,event in enumerate(events):
@@ -189,15 +180,34 @@ class EventViewerFrame(wx.Frame):
             grid.SetCellValue(row,6,event.desc)
             grid.SetCellValue(row,7,str(event.data))
         
-        self.setReferenceTime(events[0])
+        if len(self.events) > 0:
+            self.setReferenceTime(events[0])
 
         grid.AutoSizeColumns()
+
+        self.tree = tree = wx.TreeCtrl(self, style=(wx.TR_HIDE_ROOT|wx.TR_HAS_BUTTONS))
+        root = tree.AddRoot('ROOT')
+        self.addEventsToTree(events, root)
+        self.Bind(wx.EVT_TREE_SEL_CHANGED, self.onTreeSelectionChanged, self.tree)
+
+        hsizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        hsizer2.Add(self.tree, 2, wx.EXPAND)
+        hsizer2.Add(self.grid, 5, wx.EXPAND)
+
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+        vsizer.Add(hsizer, 0, wx.EXPAND)
+        vsizer.Add(hsizer2, 1, wx.EXPAND)
+
+        vsizer.SetMinSize((1200,600))
 
         self.SetSizer(vsizer)
         self.SetAutoLayout(1)
         vsizer.Fit(self)
 
-        self.current_selection = -1
+        self.current_event_selection = None
+        
+        if len(self.events) == 0:
+            displayErrorDialog(self, "No events")
 
         self.Show(True)
 
@@ -208,17 +218,28 @@ class EventViewerFrame(wx.Frame):
             sum += 1 + EventViewerFrame.sumChildren(child)
         return sum
 
+    def addEventsToTree(self, events, subtree):
+        for event in events:
+            desc = event.type + " : " + event.name
+            new_subtree = self.tree.AppendItem(subtree, desc)
+            self.tree.SetPyData(new_subtree, event)
+            self.addEventsToTree(event.children, new_subtree)
+
     def onSelectGridCell(self, event):
-        self.current_selection = event.GetRow()
+        self.current_event_selection = self.events[event.GetRow()]
         #print "current selection = ", self.current_selection
         event.Skip()
 
+    def onTreeSelectionChanged(self, event):
+        item = event.GetItem()
+        if item:
+            self.current_event_selection = self.tree.GetPyData(item)
+
     def onSetReferenceTime(self, event):
-        if self.current_selection < 0:
-            displayErrorDialog(self, "Please select a cell from a given row")
+        if self.current_event_selection is None:
+            displayErrorDialog(self, "Please select a cell or tree item")
         else:
-            event = self.events[self.current_selection]
-            self.setReferenceTime(event)
+            self.setReferenceTime(self.current_event_selection)
 
     def setReferenceTime(self, ref_event):
         grid = self.grid
@@ -229,18 +250,14 @@ class EventViewerFrame(wx.Frame):
         grid.AutoSizeColumns()
 
     def onViewChildren(self, event):
-        if self.current_selection < 0:
+        if self.current_event_selection is None:
             displayErrorDialog(self, "Please select a cell from a given row")
         else:
             #print "current selection = ", self.current_selection
-            event = self.events[self.current_selection]
-            if len(event.children) == 0:
+            if len(self.current_event_selection.children) == 0:
                 displayErrorDialog(self, "Event has no children")
             else:
-                viewer = EventViewerFrame(event.children)
-                #viewer.SetSize(wx.Size(600, 600))
-                #viewer.Layout()
-                #viewer.Show(True)
+                viewer = EventViewerFrame(self.current_event_selection.children)
                 viewer.Raise()
 
     def onQuit(self, event):
