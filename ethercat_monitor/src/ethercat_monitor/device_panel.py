@@ -53,7 +53,7 @@ class DevicePanel(wx.Panel):
         #wx.lib.scrolledpanel.ScrolledPanel.__init__(self,parent,-1)
 
 
-        self.num_rows = 14
+        self.num_cols = 14
         # Header of device grid.  Hack to keep header at top of grid while other grid scrolls
         #header_grid = wx.grid.Grid(self) 
         #self.header_grid = header_grid
@@ -61,8 +61,8 @@ class DevicePanel(wx.Panel):
         device_grid = wx.grid.Grid(self)
         self.device_grid = device_grid
 
-        device_grid.CreateGrid(0,self.num_rows)
-        #header_grid.CreateGrid(0,self.num_rows)
+        device_grid.CreateGrid(0,self.num_cols)
+        #header_grid.CreateGrid(0,self.num_cols)
 
         self.SetColLabelValue(0, "Device")
         self.SetColLabelValue(1, "HWID");
@@ -94,6 +94,7 @@ class DevicePanel(wx.Panel):
         self.SetSizer(vsizer)
         self.SetAutoLayout(1)
         #self.SetupScrolling()
+
 
     def SetColLabelValue(self, col_num, label_value):    
         #self.header_grid.SetColLabelValue(col_num, label_value)
@@ -137,7 +138,7 @@ class DevicePanel(wx.Panel):
         last_dev_name = None
         for device,num,port in port_list:
 
-            row_data = [ cell_data_empty for unused in range(self.num_rows) ]            
+            row_data = [ cell_data_empty for unused in range(self.num_cols) ]            
             row_data[4] = CellData('Port%d'%num)
             row_data[5] = CellData(port.lost_links, ERROR if (port.lost_links != 0) else DATA)
             row_data[6] = CellData(port.frame_errors, ERROR if (port.frame_errors != 0) else DATA)
