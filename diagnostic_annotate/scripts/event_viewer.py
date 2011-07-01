@@ -108,9 +108,10 @@ def pretty_duration(duration):
 
 
 class EventViewerFrame(wx.Frame):
-    def __init__(self, events):
+    def __init__(self, events, input_filename=""):
         wx.Frame.__init__(self, None, -1, "Event Viewer")
 
+        self.input_filename = input_filename
         self.events = events
         self.current_selection = -1
 
@@ -130,11 +131,14 @@ class EventViewerFrame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.onSetReferenceTime, self.set_ref_button)
         self.view_children_button = wx.Button(self, -1, "View Children")
         self.Bind(wx.EVT_BUTTON, self.onViewChildren, self.view_children_button)
+        self.filename_textctrl = wx.TextCtrl(self, -1, self.input_filename, style=wx.TE_READONLY)
 
         # button bar
         hsizer = wx.BoxSizer(wx.HORIZONTAL)       
         hsizer.Add(self.set_ref_button, 0, wx.EXPAND)
         hsizer.Add(self.view_children_button, 0, wx.EXPAND)
+        hsizer.Add(self.filename_textctrl, 1, wx.EXPAND)
+
 
         grid = wx.grid.Grid(self)
         self.grid = grid
@@ -257,7 +261,7 @@ class EventViewerFrame(wx.Frame):
             if len(self.current_event_selection.children) == 0:
                 displayErrorDialog(self, "Event has no children")
             else:
-                viewer = EventViewerFrame(self.current_event_selection.children)
+                viewer = EventViewerFrame(self.current_event_selection.children, self.input_filename)
                 viewer.Raise()
 
     def onQuit(self, event):
@@ -282,21 +286,28 @@ def main(argv):
             return 1
 
 
-    if len(argv) != 1:
+    if len(argv) < 1:
       usage(progname)
       return 1
 
-    input_filename = argv[0]
-    fd = open(input_filename)
-    y = yaml.load(fd)
-    fd.close()    
-    yaml_events = y['events']
-    events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
-
-    events = filterPipeline1(events)
 
     app = wx.PySimpleApp()
-    EventViewerFrame(events)
+
+    for input_filename in argv:
+        fd = open(input_filename)
+        y = yaml.load(fd)
+        fd.close()
+        yaml_events = y['events']
+        events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
+        if len(events) == 0:
+            print "No events in ", input_filename
+        else:
+            events = filterPipeline1(events)
+            if len(events) == 0:
+                print "No events after filtering from ", input_filename
+            else:
+                EventViewerFrame(events, input_filename)
+
     app.MainLoop()
 
     return 0
