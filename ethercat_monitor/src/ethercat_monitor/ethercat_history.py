@@ -39,7 +39,6 @@
 
 
 from diagnostic_msgs.msg import DiagnosticStatus, DiagnosticArray, KeyValue
-from ethercat_device_status import EtherCATDeviceMissing, EtherCATDevicePortMissing
 import rosbag
 import sys 
 import os
