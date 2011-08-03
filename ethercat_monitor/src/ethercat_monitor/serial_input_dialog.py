@@ -11,7 +11,7 @@ class SerialInputDialog(wx.Dialog):
         self.serial_textctrl.SetToolTip(wx.ToolTip("Enter component serial number here."))
         self.serial_textctrl.SetValue(self.serial)
 
-        self.serial_label = wx.StaticText(self, label="Serial Number")
+        self.serial_label = wx.StaticText(self, label="Serial Number : ")
 
         self.cancel_button = wx.Button(self, -1, "Cancel")
         self.Bind(wx.EVT_BUTTON, self.onCancel, self.cancel_button)        
@@ -20,8 +20,8 @@ class SerialInputDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self.onOk, self.ok_button)
 
         hsizer1 = wx.BoxSizer(wx.HORIZONTAL)
-        hsizer1.Add(self.serial_label, 0, wx.EXPAND)
-        hsizer1.Add(self.serial_textctrl, 1, wx.EXPAND)
+        hsizer1.Add(self.serial_label, 0, wx.ALIGN_CENTER_VERTICAL)
+        hsizer1.Add(self.serial_textctrl, 2, wx.EXPAND)
 
         hsizer2 = wx.BoxSizer(wx.HORIZONTAL)
         hsizer2.Add(self.cancel_button, 0, wx.EXPAND)
@@ -29,11 +29,12 @@ class SerialInputDialog(wx.Dialog):
 
         vsizer = wx.BoxSizer(wx.VERTICAL)
         vsizer.Add(hsizer1, 0, wx.EXPAND)
-        vsizer.Add(hsizer2, 0, wx.EXPAND)
+        vsizer.Add(hsizer2, 0, wx.ALIGN_RIGHT)
         
         self.SetSizer(vsizer)
+        self.SetAutoLayout(1)
+        #vsizer.Fit(self)
         self.Centre()
-        self.Layout()
         self.Show(True) 
 
     def onCancel(self, event):
