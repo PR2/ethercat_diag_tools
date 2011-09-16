@@ -63,6 +63,7 @@ class EtherCATTimestepSummary:
         self.late = 0
         self.lost_links = 0
         self.frame_errors = 0
+        self.sent = 0
 
 class EtherCATHistoryTimestepData:
     def __init__(self,system):
@@ -95,6 +96,7 @@ class EtherCATHistoryTimestepData:
         summary.lost_links   = lost_links
         summary.late         = self.getMaster().late
         summary.dropped      = self.getMaster().dropped
+        summary.dropped      = self.getMaster().sent
         return summary
 
     def numDevices(self):

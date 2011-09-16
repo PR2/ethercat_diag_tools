@@ -149,13 +149,14 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
 
         # Master grid
         master_grid = wx.grid.Grid(self)
-        master_grid.CreateGrid(1,6)
+        master_grid.CreateGrid(1,7)
         master_grid.SetColLabelValue(0, "Sent")
         master_grid.SetColLabelValue(1, "Drops")
         master_grid.SetColLabelValue(2, "Late")
         master_grid.SetColLabelValue(3, "Drops per Billion Sends")
         master_grid.SetColLabelValue(4, "Drops per Hour")
         master_grid.SetColLabelValue(5, "Unassigned Drops")
+        master_grid.SetColLabelValue(6, "Lost Links")
         master_grid.SetRowLabelSize(0) # hide the row labels
         master_grid.AutoSize() 
         self.master_grid = master_grid
@@ -293,11 +294,13 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
         WARN = CellData.WARN
         DATA = CellData.DATA
         empty = cell_data_empty #CellData()
-        master = tsd.getMaster()
-        data = [empty for i in range(6)]
-        sent = master.sent
-        dropped = master.dropped
-        late = master.late
+
+        summary = tsd.getSummary()
+        data = [empty for i in range(7)]
+        sent    = summary.sent    # master.sent
+        dropped = summary.dropped # master.dropped
+        late    = summary.late    # master.late
+        lost_links = summary.lost_links
 
         data[0] = CellData(sent)
         data[1] = CellData(dropped, ERROR if (dropped > 0) else DATA)
@@ -321,6 +324,7 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
                 data[5] = CellData("?", WARN)
             else:
                 data[5] = CellData(unassigned_drops, ERROR if (unassigned_drops > 0) else DATA)
+        data[6] = CellData(lost_links, ERROR if (lost_links > 0) else DATA)
         grid = self.master_grid
         row = 0
         for col,cell_data in enumerate(data):
