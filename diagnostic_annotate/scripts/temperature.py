@@ -68,23 +68,19 @@ import traceback
 import re
 import csv
 
-from diagnostic_annotate.diag_event import DiagEvent, no_event
-from diagnostic_annotate.event_delay import EventDelay
-from diagnostic_annotate.delay_queue import DelayQueue
-from diagnostic_annotate.bagutil import get_yaml_bag_info
-
-from diagnostic_annotate.ethercat_device_diag import EtherCATDeviceDiag, EtherCATDeviceAddDiag
-from diagnostic_annotate.power_board_diag import PowerBoardDiag, PowerBoardAddDiag
-from diagnostic_annotate.realtime_loop_diag import RealtimeControlLoopDiag
-from diagnostic_annotate.ethercat_master_diag import EtherCATMasterDiag
-
 from diagnostic_annotate.kv_convert import ConvertVar, ConvertList, KeyValueConvertList, VarStorage
-
 
 def usage(progname):
     print __doc__ % vars()
 
 
+
+def _average(L):
+    """ Returns average of list of values"""
+    if len(L) == 0:
+        raise RuntimeError("No average of empty list")
+    return float(sum(L)) / float(len(L))
+    
 
 class EtherCATDeviceDiag:
     """ Parses out temperature data from EtherCAT Device diagnostics """
@@ -107,11 +103,11 @@ class EtherCATDeviceDiag:
         if vals.winding_temp is not None:
             # only certian motors will have heating model enaled.
             # only those models will have winding and housing temperatures
-            result.append( (self.name+" winding temp", vals.winding_temp)   )
-            result.append( (self.name+" housing temp", vals.housing_temp)   )
-            result.append( (self.name+" heating power", vals.heating_power) )
-        result.append( (self.name+" bridge temp", vals.bridge_temp)     )
-        result.append( (self.name+" board temp", vals.board_temp)       )
+            result.append( (self.name+" winding temp (max)", vals.winding_temp,  max ) )
+            result.append( (self.name+" housing temp (max)", vals.housing_temp,  max ) )
+            result.append( (self.name+" heating power (avg)", vals.heating_power, _average ) )
+        result.append( (self.name+" bridge temp (max)", vals.bridge_temp, max) )
+        result.append( (self.name+" board temp (max)",  vals.board_temp,  max) )
 
         return result
 
@@ -188,23 +184,23 @@ def process_bag(inbag_filename, output_filename, sample_period):
                     print "There are multitple (%d) matches form device %s" % (matches,status.name)
 
 
-        # append new temp values to current temperature values
-        for k,v in new_data: 
-            if k in current_data: 
-                current_data[k] = max(current_data[k], v)
+        # append new values to list of current values, also keep track of specified function for later
+        for k,v,func in new_data: 
+            if k not in current_data:
+                current_data[k] = ([v],func)
             else:
-                current_data[k] = v
-            
+                current_data[k][0].append(v)
 
         # if enough time has passed, sample most recent temperature value to list
         if (t-prev_sample_time) > sample_period:
             prev_sample_time = t
-            for k,v in current_data.iteritems():
+            for k,(v,func) in current_data.iteritems():
                 if k not in data:
                     print "Adding column for", k
                     # Fill data array with empty values
                     data[k] = [empty_value for i in xrange(len(times))]
-                data[k].append(v)
+                # use func() to summarize data for results                    
+                data[k].append(func(v))
             times.append(t)
             for k,v in data.iteritems():
                 if len(v) < len(times):
