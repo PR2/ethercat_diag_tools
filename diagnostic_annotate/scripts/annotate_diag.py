@@ -137,6 +137,7 @@ class PrintEvents:
 def process_bag(inbag_filename, output_filename):
     diag_list = []
     diag_map = {}
+    ignore_set = set()
 
     EtherCATMasterDiag(diag_map)
     RealtimeControlLoopDiag(diag_map)
@@ -164,11 +165,22 @@ def process_bag(inbag_filename, output_filename):
         for status in msg.status:
             if status.name in diag_map:
                 event_list += diag_map[status.name].process(status, t)
+            elif status.name in ignore_set:
+                pass
             else:
+                matches = 0
                 for diag in diag_list:
                     if diag.is_match(status):
-                        event_list += diag.process(status, t)                    
-                        break  # stop searching when first match is found
+                        if matches == 0:
+                            event_list += diag.process(status, t)
+                        matches+=1
+                if matches == 0:
+                    # no matches for this name, for efficiency reason add name to ignore set
+                    ignore_set.add(status.name)
+                    print "Ignore diagnostics from device", status.name
+                elif matches > 1:
+                    # This should really be some type of fatal error
+                    print "There are multitple (%d) matches for device %s" % (matches,status.name)
 
         all_event_list += event_list
         
