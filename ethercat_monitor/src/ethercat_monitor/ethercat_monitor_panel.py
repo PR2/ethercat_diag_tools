@@ -267,7 +267,7 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
     def getSelectedNote(self):
         index = self.note_listbox.GetSelection()
         if index < 0:
-            displayErrorDialog(self, "Error", "No note selected to edit")
+            displayErrorDialog(self, "No note selected to edit")
             return None
         return self.notes[index]        
 
@@ -319,7 +319,7 @@ class EtherCATMonitorHistoryPanel(wx.Panel):
                 elif (drops_per_hour > 1): level = WARN
                 else : level = DATA
                 data[4] = CellData("%.2f"%drops_per_hour, level)
-            unassigned_drops = master.unassigned_drops
+            unassigned_drops = tsd.getMaster().unassigned_drops
             if unassigned_drops is None:
                 data[5] = CellData("?", WARN)
             else:
