@@ -227,7 +227,7 @@ class EventViewerFrame(wx.Frame):
         self.SetSizer(vsizer)
         self.SetAutoLayout(1)
         vsizer.Fit(self)
-        
+        self.mysizer = vsizer
         self.Show(True)
 
     @staticmethod
@@ -236,6 +236,10 @@ class EventViewerFrame(wx.Frame):
         for child in event.children:
             sum += 1 + EventViewerFrame.sumChildren(child)
         return sum
+
+    def regenerateGridData(self):
+        self.generateGridData()
+        self.Layout()
 
     def generateGridData(self):
         self.visible_event_groups = []
@@ -253,8 +257,6 @@ class EventViewerFrame(wx.Frame):
             for col_index,cell_data in enumerate(row_data):
                 self.grid.SetCellValue(row_index,col_index,cell_data)
                 self.grid.SetReadOnly( row_index, col_index );
-
-        self.grid.AutoSize()
 
 
     def addEventGroupsToTree(self, event_groups, subtree):
@@ -274,25 +276,27 @@ class EventViewerFrame(wx.Frame):
         item = event.GetItem()
         if item:
             self.current_event_group_selection = self.tree.GetPyData(item)
+            index = self.visible_event_groups.index(self.current_event_group_selection)
+            self.grid.SelectRow(index)
 
     def onTreeItemExpanded(self, event):
         item = event.GetItem()
         if item:
             self.tree.GetPyData(item).showChildren(True)
-            self.generateGridData()
+            self.regenerateGridData()
 
     def onTreeItemCollapsed(self, event):
         item = event.GetItem()
         if item:
             self.tree.GetPyData(item).showChildren(False)
-            self.generateGridData()
+            self.regenerateGridData()
 
     def onSetReferenceTime(self, event):
         if self.current_event_group_selection is None:
             displayErrorDialog(self, "Please select a cell or tree item")
         else:
             self.ref_time = self.current_event_group_selection.event.t
-            self.generateGridData()
+            self.regenerateGridData()
 
     def onTreeItemRightClick(self, event):
         print event
@@ -318,7 +322,7 @@ class EventViewerFrame(wx.Frame):
             displayErrorDialog(self, "Please select a cell from a given row")
         else:
             self.current_event_group_selection.showChildren(True)
-            self.generateGridData()
+            self.regenerateGridData()
             #viewer = EventViewerFrame(self.current_event_selection.children, self.input_filename)
             #viewer.Raise()
 
