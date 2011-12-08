@@ -64,88 +64,13 @@ import getopt
 import itertools
 import os.path
 import traceback
-import csv
-
-from diagnostic_annotate.kv_convert import ConvertVar, ConvertList, KeyValueConvertList, VarStorage
 
 
 def usage(progname):
     print __doc__ % vars()
 
 
-
-class TemperatureMerge:
-    def __init__(self):
-        # data is a dictionary that maps names to array of temperature values
-        # each array of temperature value should be exactly same length as teimes
-        self.times = []
-        self.data = {}
-
-    def verify(self):
-        for name,values in self.data.iteritems():
-            if len(values) != len(self.times):
-                raise RuntimeError("Length of data for %s (%d) doesn't match length of times (%d)" % (name, len(values), len(self.times)))
-        
-
-    def loadInputCSV(self, incsv_filename):
-        print
-        print "Input %s" % incsv_filename
-
-        if not os.path.isfile(incsv_filename): 
-            raise RuntimeError("Cannot locate input csv file %s" % incsv_filename)
-        
-        fd = open(incsv_filename, 'r')
-        reader = csv.reader(fd)
-        
-        # First two columns of *csv should be time, and reltime, the rest is temperature data
-        hdr = reader.next()
-        col_names = hdr[2:]
-
-        # Put in empty values for all columns that do not exists yet
-        for name in col_names:
-            if name not in self.data:
-                print " creating column for", name
-                self.data[name] = [None for i in xrange(len(self.times))]
-                
-        # Now read data row by row and append it to data structures
-        row_count = 0
-        for row in reader:
-            row_count+=1
-            for name, val in zip(col_names, row[2:]):
-                self.data[name].append(val)
-            self.times.append(row[0])
-
-        # Input file was missing any sort of data, then fill it in
-        for name,values in self.data.iteritems():
-            if name not in col_names:     
-                print " missing column for %s" % (name)            
-                self.data[name] += [None for i in xrange(row_count)]
-
-
-        self.verify()
-
-    def saveOutputCSV(self, outcsv_filename):
-        col_names = self.data.keys()
-        col_names.sort()    
-        sorted_data = []
-        for index,t in enumerate(self.times):
-            row = [t] + [self.data[name][index] for name in col_names]
-            sorted_data.append(row)
-
-        sorted_data.sort() # sorts data by time (first)
-
-        start_time = sorted_data[0][0]
-
-        # output collected data to file
-        output_file = open(outcsv_filename, 'w')
-        csv_out = csv.writer(output_file, delimiter=',', quotechar='"')
-        col_names = self.data.keys()
-        col_names.sort()
-        csv_out.writerow(["time","reltime(mins)"] + col_names)
-        for row in sorted_data:
-            csv_out.writerow( [ row[0], (float(row[0])-float(start_time))/60. ] + row[1:] )
-        output_file.close()
-
+from diagnostic_annotate.temperature_data import TemperatureData
 
 
 def main(argv):
@@ -171,10 +96,11 @@ def main(argv):
     output_filename = argv[0] 
     input_filenames = argv[1:]
 
-    tm = TemperatureMerge()
+    td = TemperatureData()
     for input_filename in input_filenames:
-        tm.loadInputCSV(input_filename)
-    tm.saveOutputCSV(output_filename)
+        td.loadInputCSV(input_filename)
+    td.sortData()  
+    td.saveOutputCSV(output_filename)
 
     return 0
 

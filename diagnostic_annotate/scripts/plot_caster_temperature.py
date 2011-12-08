@@ -83,7 +83,7 @@ def plotData(td, base_name):
             else:
                 temp_names.append(name)
 
-    pylab.figure()
+    pylab.figure( figsize=(8,8) )
 
     pylab.subplot(2,1,1)
     pylab.title(base_name + " temperatures")
@@ -92,6 +92,7 @@ def plotData(td, base_name):
     for name in temp_names:
         col_data = td.getColumnByName(name)
         pylab.plot(rel_times,col_data,label=name)
+    pylab.ylim(25, 130)
     pylab.legend(loc='best')
 
 
@@ -102,6 +103,7 @@ def plotData(td, base_name):
     for name in power_names:
         col_data = td.getColumnByName(name)
         pylab.plot(rel_times,col_data,label=name)
+    pylab.ylim(0, 14)
     pylab.legend(loc='best')
 
 
