@@ -132,7 +132,10 @@ class IntervalMerge(object):
             #print "Single element Interval", interval.children[0]
             results.append(interval.children[0])
         else:
-            #print "Interval with %d children" % len(interval.children)
+            #put set of children types in interval description
+            subtypes = set( [c.type for c in interval.children ] )
+            interval.name = ', '.join(subtypes)
+            interval.desc = 'Interval : ' + ', '.join(subtypes)
             results.append(interval)
         
     def process(self, events):
