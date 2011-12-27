@@ -52,7 +52,7 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
-from diagnostic_annotate.merge_filters import filterPipeline1
+from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop
 from diagnostic_annotate.event_tools import sortEvents
 
 import wx
@@ -62,6 +62,7 @@ import sys
 import getopt
 import time
 import math
+import copy
 
 def displayErrorDialog(parent, message):
     dlg = wx.MessageDialog(parent, message, caption="Error", style=(wx.OK | wx.CENTRE | wx.ICON_ERROR))
@@ -140,23 +141,39 @@ class EventGroup:
 
 
 
+class BagEvent:
+    def __init__(self, input_filename):        
+        fd = open(input_filename)
+        y = yaml.load(fd)
+        fd.close()
+        # make event for bagfile header
+        bag_yaml = y['bag']
+        self.bag_start = rospy.Time(bag_yaml['start'])
+        bag_end = rospy.Time(bag_yaml['end'])
+        bag_path = bag_yaml['path']
+        self.bag_event = DiagEvent('BagFileStart', 'Bag start', self.bag_start, bag_path)
+        yaml_events = y['events']
+        events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
+        self._events = events
+
+    def filter(self, filter_pipeline):
+        # filtering may change event objects, 
+        # filter on deep copy of original events since we want to keep original events unchanged 
+        events = copy.deepcopy(self._events)
+        self.bag_event.children = filter_pipeline(events)
+
 
 class EventViewerFrame(wx.Frame):
-    def __init__(self, events, input_filename=""):
+    def __init__(self, input_filenames):
         wx.Frame.__init__(self, None, -1, "Event Viewer")
 
-        self.input_filename = input_filename
-        #self.events = events
-        self.event_group_selection = None
-        if len(events) > 0:
-            self.ref_time = events[0].t
-        else:
-            self.ref_time = rospy.Time(0)
-        self.event_groups = [EventGroup(event,0) for event in events]        
-        self.visible_event_groups = None
-
-        if len(events) == 0:
-            displayErrorDialog(self, "No events")
+        self.bag_events = []
+        for filename in input_filenames:            
+            try:
+                be = BagEvent(filename)
+                self.bag_events.append(be)
+            except Exception,e:
+                print "Exception processing file %s : %s" % (filename, str(e))
 
         # Setting up the menu.
         filemenu= wx.Menu()
@@ -174,13 +191,18 @@ class EventViewerFrame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.onSetReferenceTime, self.set_ref_button)
         self.view_children_button = wx.Button(self, -1, "View Children")
         self.Bind(wx.EVT_BUTTON, self.onViewChildren, self.view_children_button)
-        self.filename_textctrl = wx.TextCtrl(self, -1, self.input_filename, style=wx.TE_READONLY)
+
+        self.filters={'None':filterPassThrough, 'default':filterPipeline1}
+        self.filters['breaker trip'] = filterBreakerTrips
+        self.filters['multi-runstop'] = filterMultiRunstop
+        self.filter_combobox = wx.ComboBox(self, -1, choices=self.filters.keys(), style=(wx.CB_READONLY | wx.CB_DROPDOWN))
+        self.Bind(wx.EVT_COMBOBOX, self.onFilterSelect)
 
         # button bar
         hsizer = wx.BoxSizer(wx.HORIZONTAL)       
         hsizer.Add(self.set_ref_button, 0, wx.EXPAND)
         hsizer.Add(self.view_children_button, 0, wx.EXPAND)
-        hsizer.Add(self.filename_textctrl, 1, wx.EXPAND)
+        hsizer.Add(self.filter_combobox, 0, wx.EXPAND)
         
         grid = wx.grid.Grid(self)
         self.grid = grid
@@ -203,17 +225,16 @@ class EventViewerFrame(wx.Frame):
         grid.SetRowLabelSize(0) # hide the row labels
         grid.SetColLabelSize(grid.GetDefaultColLabelSize() * 2)
         grid.EnableDragGridSize(False)
-        self.generateGridData()
         
         grid.AutoSizeColumns()
 
-        self.tree = tree = wx.TreeCtrl(self, style=(wx.TR_HIDE_ROOT|wx.TR_HAS_BUTTONS))
-        root = tree.AddRoot('ROOT')
-        self.addEventGroupsToTree(self.event_groups, root)
+        self.tree = wx.TreeCtrl(self, style=(wx.TR_HIDE_ROOT|wx.TR_HAS_BUTTONS))
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.onTreeSelectionChanged, self.tree)
         self.Bind(wx.EVT_TREE_ITEM_EXPANDED, self.onTreeItemExpanded, self.tree)
         self.Bind(wx.EVT_TREE_ITEM_COLLAPSED, self.onTreeItemCollapsed, self.tree)
 
+        self.runFilter(filterPassThrough)
+        self.generateGridData()
 
         hsizer2 = wx.BoxSizer(wx.HORIZONTAL)
         hsizer2.Add(self.tree, 2, wx.EXPAND)
@@ -230,6 +251,7 @@ class EventViewerFrame(wx.Frame):
         vsizer.Fit(self)
         self.mysizer = vsizer
         self.Show(True)
+
 
     @staticmethod
     def sumChildren(event):
@@ -261,12 +283,46 @@ class EventViewerFrame(wx.Frame):
 
 
     def addEventGroupsToTree(self, event_groups, subtree):
+        """ Recursively wraps DiagEvent in EventGroup class"""
         for event_group in event_groups:
             event = event_group.event
             desc = event.type + " : " + event.name
             new_subtree = self.tree.AppendItem(subtree, desc)
             self.tree.SetPyData(new_subtree, event_group)
             self.addEventGroupsToTree(event_group.subgroups, new_subtree)
+
+
+    def runFilter(self, filter_func):
+        """ Run new filter on all bag files, then update tree control and grid"""
+        for be in self.bag_events:
+            be.filter(filter_func)
+
+        events = sortEvents([be.bag_event for be in self.bag_events])
+        self.events = events
+        if len(events) == 0:
+            displayErrorDialog(self, "No events")
+
+        self.event_group_selection = None
+        if len(events) > 0:
+            self.ref_time = events[0].t
+        else:
+            self.ref_time = rospy.Time(0)
+        self.event_groups = [EventGroup(event,0) for event in events]        
+        self.visible_event_groups = None
+
+        self.tree.DeleteAllItems()
+        root = self.tree.AddRoot('ROOT')
+        self.addEventGroupsToTree(self.event_groups, root)
+
+
+
+    def onFilterSelect(self, event):
+        filter_name = self.filter_combobox.GetValue()
+        filter_func = self.filters[filter_name]
+        #item = event.GetSelection()
+        print "Filtering", filter_name
+        self.runFilter(filter_func)
+        self.regenerateGridData()
 
 
     def onSelectGridCell(self, event):
@@ -353,40 +409,42 @@ def main(argv):
       usage(progname)
       return 1
 
+    input_filenames = argv
 
     app = wx.PySimpleApp()
-
-    bag_events=[]
-    for input_filename in argv:
-        try:
-            fd = open(input_filename)
-            y = yaml.load(fd)
-            fd.close()
-            # make event for bagfile header
-            bag_yaml = y['bag']
-            bag_start = rospy.Time(bag_yaml['start'])
-            bag_end = rospy.Time(bag_yaml['end'])
-            bag_path = bag_yaml['path']
-            bag_event = DiagEvent('BagFileStart', 'Bag start', bag_start, bag_path)
-            yaml_events = y['events']
-            events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
-            if len(events) == 0:
-                print "No events in ", input_filename
-            else:
-                events = filterPipeline1(events)
-                if len(events) == 0:
-                    print "No events after filtering from ", input_filename
-        except Exception,e:
-            print "Exception reading bag file %s : %s" % (input_filename, str(e))
-
-        bag_event.children = events
-        bag_events.append(bag_event)
-
-    # make window 
-    bag_events = sortEvents(bag_events)
-    EventViewerFrame(bag_events, input_filename)
-
+    EventViewerFrame(input_filenames)
     app.MainLoop()
+
+    if False:
+        bag_events=[]
+        for input_filename in argv:
+            try:
+                fd = open(input_filename)
+                y = yaml.load(fd)
+                fd.close()
+                # make event for bagfile header
+                bag_yaml = y['bag']
+                bag_start = rospy.Time(bag_yaml['start'])
+                bag_end = rospy.Time(bag_yaml['end'])
+                bag_path = bag_yaml['path']
+                bag_event = DiagEvent('BagFileStart', 'Bag start', bag_start, bag_path)
+                yaml_events = y['events']
+                events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
+                if len(events) == 0:
+                    print "No events in ", input_filename
+                else:
+                    events = filterPipeline1(events)
+                    if len(events) == 0:
+                        print "No events after filtering from ", input_filename
+            except Exception,e:
+                print "Exception reading bag file %s : %s" % (input_filename, str(e))
+
+            bag_event.children = events
+            bag_events.append(bag_event)
+
+        # make window 
+        bag_events = sortEvents(bag_events)
+
 
     return 0
 
