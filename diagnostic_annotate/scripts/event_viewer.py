@@ -53,6 +53,7 @@ import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
 from diagnostic_annotate.merge_filters import filterPipeline1
+from diagnostic_annotate.event_tools import sortEvents
 
 import wx
 import wx.grid
@@ -256,7 +257,7 @@ class EventViewerFrame(wx.Frame):
             row_data = event_group.generateGridData(self.ref_time)
             for col_index,cell_data in enumerate(row_data):
                 self.grid.SetCellValue(row_index,col_index,cell_data)
-                self.grid.SetReadOnly( row_index, col_index );
+                #self.grid.SetReadOnly( row_index, col_index );
 
 
     def addEventGroupsToTree(self, event_groups, subtree):
@@ -355,20 +356,35 @@ def main(argv):
 
     app = wx.PySimpleApp()
 
+    bag_events=[]
     for input_filename in argv:
-        fd = open(input_filename)
-        y = yaml.load(fd)
-        fd.close()
-        yaml_events = y['events']
-        events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
-        if len(events) == 0:
-            print "No events in ", input_filename
-        else:
-            events = filterPipeline1(events)
+        try:
+            fd = open(input_filename)
+            y = yaml.load(fd)
+            fd.close()
+            # make event for bagfile header
+            bag_yaml = y['bag']
+            bag_start = rospy.Time(bag_yaml['start'])
+            bag_end = rospy.Time(bag_yaml['end'])
+            bag_path = bag_yaml['path']
+            bag_event = DiagEvent('BagFileStart', 'Bag start', bag_start, bag_path)
+            yaml_events = y['events']
+            events = [ DiagEvent.from_yaml(yaml_event) for yaml_event in yaml_events ]
             if len(events) == 0:
-                print "No events after filtering from ", input_filename
+                print "No events in ", input_filename
             else:
-                EventViewerFrame(events, input_filename)
+                events = filterPipeline1(events)
+                if len(events) == 0:
+                    print "No events after filtering from ", input_filename
+        except Exception,e:
+            print "Exception reading bag file %s : %s" % (input_filename, str(e))
+
+        bag_event.children = events
+        bag_events.append(bag_event)
+
+    # make window 
+    bag_events = sortEvents(bag_events)
+    EventViewerFrame(bag_events, input_filename)
 
     app.MainLoop()
 
