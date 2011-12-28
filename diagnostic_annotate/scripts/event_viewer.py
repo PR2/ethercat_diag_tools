@@ -191,6 +191,9 @@ class EventViewerFrame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.onSetReferenceTime, self.set_ref_button)
         self.view_children_button = wx.Button(self, -1, "View Children")
         self.Bind(wx.EVT_BUTTON, self.onViewChildren, self.view_children_button)
+        self.autosize_grid_button = wx.Button(self, -1, "AutoSize Grid")
+        self.Bind(wx.EVT_BUTTON, self.onAutoSizeGrid, self.autosize_grid_button)
+
 
         self.filters={'None':filterPassThrough, 'default':filterPipeline1}
         self.filters['breaker trip'] = filterBreakerTrips
@@ -202,6 +205,7 @@ class EventViewerFrame(wx.Frame):
         hsizer = wx.BoxSizer(wx.HORIZONTAL)       
         hsizer.Add(self.set_ref_button, 0, wx.EXPAND)
         hsizer.Add(self.view_children_button, 0, wx.EXPAND)
+        hsizer.Add(self.autosize_grid_button, 0, wx.EXPAND)
         hsizer.Add(self.filter_combobox, 0, wx.EXPAND)
         
         grid = wx.grid.Grid(self)
@@ -235,6 +239,7 @@ class EventViewerFrame(wx.Frame):
 
         self.runFilter(filterPassThrough)
         self.generateGridData()
+        self.grid.AutoSizeColumns()
 
         hsizer2 = wx.BoxSizer(wx.HORIZONTAL)
         hsizer2.Add(self.tree, 2, wx.EXPAND)
@@ -263,6 +268,7 @@ class EventViewerFrame(wx.Frame):
     def regenerateGridData(self):
         self.generateGridData()
         self.Layout()
+
 
     def generateGridData(self):
         self.visible_event_groups = []
@@ -314,7 +320,8 @@ class EventViewerFrame(wx.Frame):
         root = self.tree.AddRoot('ROOT')
         self.addEventGroupsToTree(self.event_groups, root)
 
-
+    def onAutoSizeGrid(self, event):
+        self.grid.AutoSizeColumns()
 
     def onFilterSelect(self, event):
         filter_name = self.filter_combobox.GetValue()
