@@ -2,6 +2,7 @@ PKG = 'diagnostic_annotate'
 import roslib
 roslib.load_manifest(PKG)
 import rospy
+import re
 
 from diagnostic_annotate.diag_event import DiagEvent
 from diagnostic_annotate.event_tools import StartAndStopCache, sortEvents
@@ -19,6 +20,7 @@ class RunstopMerge(object):
         before = rospy.Duration(10.0)
         after = rospy.Duration(10.0)
 
+        matching_types = set( ("UndervoltageLockoutEvent", "CircuitBreakerTrip", "OnlyMotorHaltedEvent", "MtraceSafetyLockout") )
         for current_event in events:
             if current_event.type == "RunStopEvent":
                 print "Runstop", current_event
@@ -27,17 +29,7 @@ class RunstopMerge(object):
                 (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
                 for event in events[start_index:stop_index]:
                     if (not event.hide):
-                        if (event.type == "UndervoltageLockoutEvent") or (event.type == "UndervoltageLockoutMerge"):
-                            print " Runstop Merge", event
-                            event.hide = True
-                            current_event.children.append(event)
-                        if event.type == "CircuitBreakerTrip":
-                            print " Runstop Merge", event
-                            event.hide = True
-                            current_event.children.append(event)
-                            current_event.data['breaker_trip'] = True
-                        if event.type == "OnlyMotorHaltedEvent":
-                            print " Runstop Merge", event
+                        if event.type in matching_types:
                             event.hide = True
                             current_event.children.append(event)
 
@@ -62,6 +54,8 @@ class CircuitBreakerMerge(object):
         before = rospy.Duration(10.0)
         after = rospy.Duration(10.0)
 
+        matching_types = set( ("UndervoltageLockoutEvent","UndervoltageLockoutMerge","MtraceSafetyLockout") )
+
         for current_event in events:
             if current_event.type == "CircuitBreakerTrip":
                 start_time = current_event.t - before
@@ -69,8 +63,7 @@ class CircuitBreakerMerge(object):
                 (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
                 for event in events[start_index:stop_index]:
                     if (not event.hide):
-                        if (event.type == "UndervoltageLockoutEvent") or (event.type == "UndervoltageLockoutMerge"):
-                            print " Runstop Merge", event
+                        if event.type in matching_types:
                             event.hide = True
                             current_event.children.append(event)
 
@@ -216,6 +209,20 @@ class KeepEventTypes(object):
         return results
 
 
+class KeepEventTypesRegEx(object):
+    """ Keeps certain Event types in list and removes all others """
+    def __init__(self, regex_list):
+        self.regex_list = [re.compile(regex) for regex in regex_list]
+
+    def process(self,events):
+        results = []
+        for event in events:
+            for regex in self.regex_list:
+                if regex.match(event.type):
+                    results.append(event)
+        return results
+
+
 
 def runFilters(filters, events):
     """ Run a list of filters on events """
@@ -255,9 +262,25 @@ def filterMultiRunstop(events):
     filters.append( KeepEventTypes(['MultiRunstopMerge']) )
     return runFilters(filters,events)
 
+def filterOnlyIgnored(events):
+    filters = []
+    filters.append( KeepEventTypes(['Ignored']) )
+    return runFilters(filters,events)
+
+def filterEcatCommunication(events):
+    filters = []
+    filters.append( KeepEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'LostLink']) )
+    return runFilters(filters,events)
+
+def filterMtrace(events):
+    filters = []
+    filters.append( KeepEventTypesRegEx(['.*Mtrace.*']) )
+    filters.append( IntervalMerge(2.0) )
+    return runFilters(filters,events)
+
 def filterPipeline1(events):
     filters = []
-    filters.append( RemoveEventTypes(['RxError', 'DroppedPacket', 'LatePacket']) )
+    filters.append( RemoveEventTypes(['Ignored', 'RxError', 'DroppedPacket', 'LatePacket']) )
     filters.append( UndervoltageMerge() )
     filters.append( RunstopMerge() )
     filters.append( MultiRunstopMerge() )

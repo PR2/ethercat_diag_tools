@@ -48,7 +48,11 @@ Options:
 """
 
 PKG = 'diagnostic_annotate'
-REV = 1.0
+REV = 1.01
+# rev 1.00 : start
+# rev 1.01 : 
+#   Added processing support for MotorTraces and Mtrace event types
+#   Added event types for ingore and mutiple match errors 
 import roslib
 roslib.load_manifest(PKG)
 
@@ -65,6 +69,7 @@ import itertools
 import yaml
 import os.path
 import traceback
+import re
 
 from diagnostic_annotate.diag_event import DiagEvent, no_event
 from diagnostic_annotate.event_delay import EventDelay
@@ -80,28 +85,14 @@ from diagnostic_annotate.ethercat_master_diag import EtherCATMasterDiag
 def usage(progname):
     print __doc__ % vars()
 
-class RunStopEventMerge:
-    """ Merges Undervoltage errors and MotorsHalted events into Runstop event """
-    def __init__(self):
-        def get_t(obj):
-            return obj.t
-        past = rospy.Duration.from_sec(2)
-        future = rospy.Duration.from_sec(5)
-        self.dq = DelayQueue(self.merge, get_t, future, past)
 
-    def process(self,event_list):
-        return self.dq.process(event_list)
+def ignoreDevice(name, t):
+    """ Represents an ignored device diagnostic type"""
+    return DiagEvent('Ignored', name, t, "Ignored device diagnostics")
 
-    def merge(self, event, future, past):
-        if event.type != 'RunStopEvent':
-            return
-        for event2 in itertools.chain(future,past):
-            if event.type == 'UndervoltageLockoutEvent':
-                event.children.append(event2)
-                event2.hide = True
-            elif event.type == 'OnlyMotorHaltedEvent' and event.motors_halted == None:
-                event.children.append(event2)
-                event2.hide = True
+def multipleMatchError(name, t, matches):
+    """ Represents error where multiple things match a single device """
+    return DiagEvent('MultipleMatches', name, t, "Multiple (%d) matches for %s" % (matches, name) )
 
 
 class PrintEvents:
@@ -134,78 +125,126 @@ class PrintEvents:
             print '   ', event.short_desc()
 
 
-def process_bag(inbag_filename, output_filename):
-    diag_list = []
-    diag_map = {}
-    ignore_set = set()
+class DiagBagProcessor(object):
+    def __init__(self, inbag_filename):
+        self.diag_list = []
+        self.diag_map = {}
+        self.ignore_set = set()
 
-    EtherCATMasterDiag(diag_map)
-    RealtimeControlLoopDiag(diag_map)
-    EtherCATDeviceAddDiag(diag_list, diag_map)
-    PowerBoardAddDiag(diag_list, diag_map)
+        EtherCATMasterDiag(self.diag_map)
+        RealtimeControlLoopDiag(self.diag_map)
+        EtherCATDeviceAddDiag(self.diag_list, self.diag_map)
+        PowerBoardAddDiag(self.diag_list, self.diag_map)
 
-    if not os.path.isfile(inbag_filename): 
-        raise RuntimeError("Cannot locate input bag file %s" % inbag_filename)
+        if not os.path.isfile(inbag_filename): 
+            raise RuntimeError("Cannot locate input bag file %s" % inbag_filename)
+        self.bag = rosbag.Bag(inbag_filename)
+        print self.bag
 
-    #output_filename = os.path.basename(inbag_filename) + '.yaml'
-    #if os.path.isfile(output_filename):
-    #    print >>sys.stderr, "Skipping", inbag_filename
-    #    return
+        # get all diagnostics or MotorTrace messsages from bag file
+        self.yaml_bag_info = get_yaml_bag_info(self.bag)
 
-    bag = rosbag.Bag(inbag_filename)
-    print bag
+        # make a mapping from topic name to type, 
+        # also make a list of topics that have specific types
+        topics = []
+        topic_types = {}
+        if 'topics' in self.yaml_bag_info:
+            for topic_yaml in self.yaml_bag_info['topics']:
+                print topic_yaml
+                typ  = topic_yaml['type']
+                topic = topic_yaml['topic']
+                topic_types[topic] = typ
+                if typ in ('ethercat_hardware/MotorTrace', 'diagnostic_msgs/DiagnosticArray'):
+                    topics.append(topic)
+        self.topics = topics
+        self.topic_types = topic_types
 
-    #for topic, msg, tbag in rosrecord.logplayer(inbag_filename):
-    all_event_list = []
-    t = None
-    for topic, msg, t in bag.read_messages(topics=['/diagnostics', 'diagnostics']):
-        t = msg.header.stamp # use timestamp from diagnostic msg head instead of bag timestamp
-        header = False
+
+    def _processMotorTrace(self, msg, t):
+        """ Processes a MotorTrace message and returns a list of DiagEvents """
+        if msg.reason == "Safety Lockout":
+            typ = "MtraceSafetyLockout"
+        elif msg.reason in ("New max voltage error", "New max current error"):
+            typ = "MtraceMotorModelWarning"
+        elif re.match("Problem with the MCB, motor, encoder, or actuator model", msg.reason):
+            typ = "MtraceMotorModelError"
+        else:
+            typ = "Mtrace"
+        d = DiagEvent(typ, msg.actuator_info.name, t, msg.reason)
+        d.data = {'reason':msg.reason}
+        return [d]
+
+    def _processDiagnosticStatus(self, msg, t):
+        """ Internal function that finds processor for DiagnosticStatus message """
+        name = msg.name
         event_list = []
-        for status in msg.status:
-            if status.name in diag_map:
-                event_list += diag_map[status.name].process(status, t)
-            elif status.name in ignore_set:
-                pass
+        if name in self.diag_map:
+            event_list += self.diag_map[name].process(msg, t)
+        elif name in self.ignore_set:
+            pass
+        else:
+            event_list = []
+            matches = 0
+            for diag in self.diag_list:
+                if diag.is_match(msg):
+                    if matches == 0:
+                        event_list += diag.process(msg, t)
+                    matches+=1
+            if matches == 0:
+                # no matches for this name, for efficiency reason add name to ignore set
+                self.ignore_set.add(name)
+                event_list.append(ignoreDevice(name, t))
+                #print "Ignore diagnostics from device", name
+            elif matches > 1:
+                print "There are multitple (%d) matches for %s" % (matches,str(name))
+                event_list.append(multipleMatchError(name, t, matches))
+        return event_list
+    
+
+    def process(self, output_filename):
+        #for topic, msg, tbag in rosrecord.logplayer(inbag_filename):
+        all_event_list = []
+        t = None
+        for topic, msg, t in self.bag.read_messages(topics=self.topics):
+            t = msg.header.stamp # use timestamp from diagnostic msg head instead of bag timestamp
+            typ = self.topic_types[topic]
+            if typ == 'diagnostic_msgs/DiagnosticArray':
+                # DiagnosticArray contains multiple submessages with DiagnosticStatus type.
+                # for purposes of this processor, treat these messages separately
+                event_list = []
+                for status in msg.status:
+                    event_list += self._processDiagnosticStatus(status, t)
+            elif typ == 'ethercat_hardware/MotorTrace':
+                # there is only one processor for all MotorTrace messages
+                event_list = self._processMotorTrace(msg, t)
             else:
-                matches = 0
-                for diag in diag_list:
-                    if diag.is_match(status):
-                        if matches == 0:
-                            event_list += diag.process(status, t)
-                        matches+=1
-                if matches == 0:
-                    # no matches for this name, for efficiency reason add name to ignore set
-                    ignore_set.add(status.name)
-                    print "Ignore diagnostics from device", status.name
-                elif matches > 1:
-                    # This should really be some type of fatal error
-                    print "There are multitple (%d) matches for device %s" % (matches,status.name)
+                raise RuntimeError("Invalid message type %s" % typ)
 
-        all_event_list += event_list
-        
-        if len(event_list) > 0:
-            last_name = event_list[0].name
-            print "On %s" % time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(t.to_sec())) 
-            for error in event_list:
-                if error.name != last_name:
-                    print ' ', error.name
-                    last_name = error.name
-                print '  ', error.desc
+            all_event_list += event_list
 
-    #print >>sys.stderr 'Will save yaml output to :', output_filename
-    yaml_bag_info = get_yaml_bag_info(bag)
-    yaml_events = []
-    yaml_events = [event.to_yaml() for event in all_event_list]
-    yaml_output = {'rev':REV, 'bag':yaml_bag_info, 'events':yaml_events}
-    output_file = open(output_filename, 'w')
-    yaml.dump(yaml_output,stream=output_file)
-    output_file.close()
+            if len(event_list) > 0:
+                last_name = event_list[0].name
+                print "On %s" % time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(t.to_sec())) 
+                for error in event_list:
+                    if error.name != last_name:
+                        print ' ', error.name
+                        last_name = error.name
+                    print '  ', error.desc
 
-    if t is not None:
-        print "Log ends %s" % time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(t.to_sec()))
-    else:
-        print "Log contains no diagnostic messages"
+        yaml_events = []
+        yaml_events = [event.to_yaml() for event in all_event_list]
+        yaml_output = {'rev':REV, 'bag':self.yaml_bag_info, 'events':yaml_events}
+        output_file = open(output_filename, 'w')
+        yaml.dump(yaml_output,stream=output_file)
+        output_file.close()
+
+        if t is not None:
+            print "Log ends %s" % time.strftime("%a, %b %d, %I:%M:%S %p", time.localtime(t.to_sec()))
+        else:
+            print "Log contains no diagnostic messages"
+            
+
+
 
 def main(argv):
     progname = argv[0]
@@ -225,35 +264,9 @@ def main(argv):
       return 1
 
     inbag_filename = argv[0]
-    output_filename = argv[1]    
-    process_bag(inbag_filename, output_filename)
-
-    # Use 30 second reordering buffer.
-    #reorder = EventDelay(30.0, True)    
-    #merge_list = []
-    #merge_list.append(RunStopEventMerge())
-    #print_errors = PrintEvents(1.0)
-    #last_error_time = rospy.Time(0)
-        
-        # Generate no-errors every 10seconds to keep merge queues moving
-        #if len(event_list) > 0:
-        #    last_error_time = t
-        #elif (t-last_error_time).to_sec() > 10.0:
-        #    #print "FLUSH ------------------------"
-        #    event_list.append(no_event("flush", t, "10second flush"))
-        #    last_error_time = t
-
-        # Put messages into reordering queue
-        #event_list = reorder.process(event_list)
-
-        #len(event_list)
-
-        # Process error list
-        #for merge in merge_list:
-        #    event_list = merge.process(event_list)            
-
-        # Process list
-        #print_errors.process(event_list)
+    output_filename = argv[1]  
+    bp = DiagBagProcessor(inbag_filename)
+    bp.process(output_filename)
 
     return 0
 

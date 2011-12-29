@@ -52,7 +52,7 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
-from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop
+from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication
 from diagnostic_annotate.event_tools import sortEvents
 
 import wx
@@ -73,10 +73,13 @@ def displayErrorDialog(parent, message):
 def pretty_duration(duration):    
     is_negative = False
     is_now = False 
+    if math.fabs(duration) < 1.0:
+        return "%.4f secs " % duration
     if math.fabs(duration) < 60.0:
         return "%.2f secs " % duration
+
         
-    if (duration < 0):
+    if (duration < 0.0):
         duration = -duration
         is_negative = True
 
@@ -195,9 +198,12 @@ class EventViewerFrame(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.onAutoSizeGrid, self.autosize_grid_button)
 
 
-        self.filters={'None':filterPassThrough, 'default':filterPipeline1}
+        self.filters={'none':filterPassThrough, 'default':filterPipeline1}
         self.filters['breaker trip'] = filterBreakerTrips
         self.filters['multi-runstop'] = filterMultiRunstop
+        self.filters['ecat communication'] = filterEcatCommunication
+        self.filters['motor trace'] = filterMtrace
+        self.filters['ignored'] = filterOnlyIgnored
         self.filter_combobox = wx.ComboBox(self, -1, choices=self.filters.keys(), style=(wx.CB_READONLY | wx.CB_DROPDOWN))
         self.Bind(wx.EVT_COMBOBOX, self.onFilterSelect)
 
@@ -237,7 +243,7 @@ class EventViewerFrame(wx.Frame):
         self.Bind(wx.EVT_TREE_ITEM_EXPANDED, self.onTreeItemExpanded, self.tree)
         self.Bind(wx.EVT_TREE_ITEM_COLLAPSED, self.onTreeItemCollapsed, self.tree)
 
-        self.runFilter(filterPassThrough)
+        self.runFilter('none')
         self.generateGridData()
         self.grid.AutoSizeColumns()
 
@@ -298,10 +304,15 @@ class EventViewerFrame(wx.Frame):
             self.addEventGroupsToTree(event_group.subgroups, new_subtree)
 
 
-    def runFilter(self, filter_func):
+    def runFilter(self, filter_name):
         """ Run new filter on all bag files, then update tree control and grid"""
-        for be in self.bag_events:
-            be.filter(filter_func)
+        try:
+            filter_func = self.filters[filter_name]
+            print "Filtering", filter_name
+            for be in self.bag_events:
+                be.filter(filter_func)
+        except Exception, e:
+            displayErrorDialog(self, "Error with filter (%s) : %s" % (filter_name, str(e)) )
 
         events = sortEvents([be.bag_event for be in self.bag_events])
         self.events = events
@@ -325,10 +336,7 @@ class EventViewerFrame(wx.Frame):
 
     def onFilterSelect(self, event):
         filter_name = self.filter_combobox.GetValue()
-        filter_func = self.filters[filter_name]
-        #item = event.GetSelection()
-        print "Filtering", filter_name
-        self.runFilter(filter_func)
+        self.runFilter(filter_name)
         self.regenerateGridData()
 
 
