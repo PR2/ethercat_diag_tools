@@ -180,6 +180,31 @@ class IntervalMerge(object):
         return results
 
 
+class EcatDeviceMerge(object):
+    """ Merge all packet drops, lost links and, invalid frames for given device into 1 event """
+    def __init__(self):
+        self.devices = {}
+
+    def process(self, events):
+        results = []
+        types = ['RxError', 'LostLink']
+        for event in events:
+            if event.type in types:
+                name = event.name
+                port = event.data['port']
+                if (name,port) not in self.devices:
+                    #print "New ECat Device Merge", name, port
+                    d = DiagEvent('EcatDeviceMerge', name, event.t, '%s port %d' % (name,port))
+                    d.data = {'port':port, 'rx_errors':0, 'invalid_frames':0, 'lost_links':0}
+                    self.devices[(name,port)] = d
+                    results.append(d)
+                d = self.devices[(name,port)]
+                if event.type == 'RxError':
+                    d.data['rx_errors'] += event.data['rx_errors']
+                    d.data['invalid_frames'] += event.data['invalid_frames']
+                elif event.type == 'LostLink':
+                    d.data['lost_links'] += event.data['lost_links']
+        return results
 
 
 class RemoveEventTypes(object):
@@ -227,9 +252,7 @@ class KeepEventTypesRegEx(object):
 def runFilters(filters, events):
     """ Run a list of filters on events """
     for f in filters:
-        #print class(f)
         if len(events) == 0:
-            print "No events"
             return []
         for event in events:
             event.hide = False
@@ -272,10 +295,31 @@ def filterEcatCommunication(events):
     filters.append( KeepEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'LostLink']) )
     return runFilters(filters,events)
 
+def filterEcatMerge(events):
+    filters = []
+    filters.append( KeepEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'LostLink']))
+    filters.append( EcatDeviceMerge() )
+    return runFilters(filters,events)
+
+
 def filterMtrace(events):
     filters = []
     filters.append( KeepEventTypesRegEx(['.*Mtrace.*']) )
     filters.append( IntervalMerge(2.0) )
+    return runFilters(filters,events)
+
+def filterMotorModel(events):
+    filters = []
+    filters.append( KeepEventTypesRegEx(['.*MtraceMotorModel.*']) )
+    filters.append( IntervalMerge(2.0) )
+    return runFilters(filters,events)
+
+
+def filterLostLinks(events):
+    """ Filter out everything except lost links on EtherCAT chain """
+    filters = []
+    filters.append( KeepEventTypes(['LostLink']) )
+    filters.append( IntervalMerge(2.0) )  # merge lost links that happen at same time (since lost links often occur in pairs)
     return runFilters(filters,events)
 
 def filterPipeline1(events):
