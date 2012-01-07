@@ -92,6 +92,7 @@ def is_indexed(inbag_filename):
         bag = rosbag.Bag(inbag_filename)
     except rosbag.ROSBagException:
         return False
+    bag.close()
     return True
 
 def remove_original(inbag_filename):
