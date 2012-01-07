@@ -181,7 +181,7 @@ class IntervalMerge(object):
 
 
 class EcatDeviceMerge(object):
-    """ Merge all packet drops, lost links and, invalid frames for given device into 1 event """
+    """ Merge all RX errors, lost links and, invalid frames for given device and port into 1 event"""
     def __init__(self):
         self.devices = {}
 
@@ -204,7 +204,34 @@ class EcatDeviceMerge(object):
                     d.data['invalid_frames'] += event.data['invalid_frames']
                 elif event.type == 'LostLink':
                     d.data['lost_links'] += event.data['lost_links']
+            else:
+                results.append(event)
         return results
+
+
+class EcatMasterMerge(object):
+    """ Merge all packet drops and late packets for EtherCAT master """
+    def __init__(self):
+        self.d = None
+
+    def process(self, events):
+        results = []
+        types = ['LatePacket', 'DroppedPacket']
+        for event in events:
+            if event.type in types:
+                if self.d is None:
+                    self.d = DiagEvent('EcatMasterMerge', event.name, event.t, event.name)
+                    self.d.data = {'lates':0, 'drops':0}
+                    results.append(self.d)
+                d = self.d
+                if event.type == 'LatePacket':                    
+                    d.data['lates'] += event.data['lates']
+                elif event.type == 'DroppedPacket':
+                    d.data['drops'] += event.data['drops']                    
+            else:
+                results.append(event)
+        return results
+
 
 
 class RemoveEventTypes(object):
@@ -299,6 +326,7 @@ def filterEcatMerge(events):
     filters = []
     filters.append( KeepEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'LostLink']))
     filters.append( EcatDeviceMerge() )
+    filters.append( EcatMasterMerge() )
     return runFilters(filters,events)
 
 
