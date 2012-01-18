@@ -52,7 +52,7 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
-from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication, filterLostLinks, filterMotorModel, filterEcatMerge
+from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication, filterLostLinks, filterMotorModel, filterEcatMerge, filterMotorsHalted
 from diagnostic_annotate.event_tools import sortEvents
 
 import wx
@@ -63,6 +63,7 @@ import getopt
 import time
 import math
 import copy
+import traceback
 
 def displayErrorDialog(parent, message):
     dlg = wx.MessageDialog(parent, message, caption="Error", style=(wx.OK | wx.CENTRE | wx.ICON_ERROR))
@@ -207,6 +208,7 @@ class EventViewerFrame(wx.Frame):
         self.filters['ignored'] = filterOnlyIgnored
         self.filters['lost links'] = filterLostLinks
         self.filters['motor model'] = filterMotorModel
+        self.filters['motors halted'] = filterMotorsHalted
         self.filter_combobox = wx.ComboBox(self, -1, choices=self.filters.keys(), style=(wx.CB_READONLY | wx.CB_DROPDOWN))
         self.Bind(wx.EVT_COMBOBOX, self.onFilterSelect)
 
@@ -315,6 +317,7 @@ class EventViewerFrame(wx.Frame):
             for be in self.bag_events:
                 be.filter(filter_func)
         except Exception, e:
+            print traceback.format_exc()
             displayErrorDialog(self, "Error with filter (%s) : %s" % (filter_name, str(e)) )
 
         events = sortEvents([be.bag_event for be in self.bag_events])

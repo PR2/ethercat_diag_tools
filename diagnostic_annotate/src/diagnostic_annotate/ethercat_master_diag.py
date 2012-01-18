@@ -44,10 +44,20 @@ roslib.load_manifest(PKG)
 from diagnostic_annotate.kv_convert import ConvertVar, KeyValueConvertList, VarStorage
 from diagnostic_annotate.diag_event import DiagEvent, generic_event
 
+def true_false_to_bool(val):
+    if val == 'false':
+        return False
+    elif val == 'true':
+        return True
+    raise RuntimeError("%s is not 'true' or 'false'" % val)
 
 def only_motor_halted_event(name, t, desc):
-    """ Represents error from master of just 'Motors Halted' """
+    """ Represents error from master of just 'Motors Halted'."""
     return DiagEvent('OnlyMotorHaltedEvent',name, t, desc)
+
+def motors_halted(name, t, desc):
+    """ Represents transition of EtherCAT Master motor halted value from false to true"""
+    return DiagEvent('MotorsHalted', name, t, "Motors halted : %s" % desc)
 
 def dropped_packet_event(name, t, drops):
     """ Represents dropped packet from EtherCAT Master """
@@ -61,6 +71,12 @@ def late_packet_event(name, t, lates):
     evt.data = {'lates' : lates}
     return evt
     
+def other_eml_event(name, t, new_other_eml, old_other_eml):
+    """ Represents seeing packets from differnt EtherCAT master """
+    evt = DiagEvent('OtherEML',name, t, '%d packets from other EtherCAT Master' % (new_other_eml - old_other_eml))
+    evt.data = {'new' : new_other_eml, 'old' : old_other_eml}
+    return evt
+
 
 class EtherCATMasterDiag:
     """ Looks for errors in EtherCAT Master """
@@ -74,8 +90,10 @@ class EtherCATMasterDiag:
         kvl = KeyValueConvertList()
         kvl.add('Dropped Packets', ConvertVar('dropped_packets', int, 0))
         kvl.add('RX Late Packet', ConvertVar('late_packets', int, 0))
+        kvl.add('RX Other EML', ConvertVar('other_eml', int, 0))
+        kvl.add('Motors halted', ConvertVar('motors_halted', true_false_to_bool, False))
         self.kvl = kvl
-                        
+                      
         self.old = VarStorage()
         kvl.set_defaults(self.old)
     
@@ -85,22 +103,31 @@ class EtherCATMasterDiag:
 
         old = self.old
         new = VarStorage()
+        name = self.name
         self.kvl.convert(msg, new)
 
         if msg.level > self.level:
             if msg.level==2 and msg.message == 'Motors halted':
-                error = only_motor_halted_event(self.name, t, msg.message)
+                error = only_motor_halted_event(name, t, msg.message)
             else:
-                error = generic_event(self.name, t, "transitioned into level %d : %s" % (msg.level, msg.message))
+                error = generic_event(name, t, "transitioned into level %d : %s" % (msg.level, msg.message))
             event_list.append(error)
         elif msg.level != 0 and msg.message != self.message:
-            event_list.append(generic_event(self.name, t, "message changed to %s" % (msg.message)))
+            event_list.append(generic_event(name, t, "message changed to %s" % (msg.message)))
 
         if new.dropped_packets != old.dropped_packets:
-            event_list.append(dropped_packet_event(self.name, t, (new.dropped_packets - old.dropped_packets)))
+            event_list.append(dropped_packet_event(name, t, (new.dropped_packets - old.dropped_packets)))
 
         if new.late_packets != old.late_packets:                                 
-            event_list.append(late_packet_event(self.name, t, (new.late_packets - old.late_packets)))
+            event_list.append(late_packet_event(name, t, (new.late_packets - old.late_packets)))
+
+        # limit rate of this event, since if another EtherCAT master is running, this value while be constantly increasing 
+        if new.other_eml != old.other_eml:
+            if (old.other_eml == 0) or ((new.other_eml - old.other_eml) > 10000):
+                event_list.append(other_eml_event(name, t, new.other_eml, new.other_eml, old.other_eml))
+                        
+        if new.motors_halted and not old.motors_halted:
+            event_list.append(motors_halted(name, t, msg.message))
 
         self.level = msg.level
         self.message = msg.message

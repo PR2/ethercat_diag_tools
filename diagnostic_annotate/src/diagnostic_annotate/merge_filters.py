@@ -9,8 +9,11 @@ from diagnostic_annotate.event_tools import StartAndStopCache, sortEvents
 
 class RunstopMerge(object):
     """ Merge Runstop and undervoltage events into one """
-    def __init__(self):
-        pass
+    def __init__(self, no_motors_halted=False):
+        self.matching_types = set( ("UndervoltageLockoutEvent", "UndervoltageLockoutMerge", "CircuitBreakerTrip", "MtraceSafetyLockout") )
+        if not no_motors_halted:
+            self.matching_types.add("OnlyMotorHaltedEvent")
+            self.matching_types.add("MotorsHalted")
 
     def process(self,events):
         if len(events) == 0:
@@ -20,7 +23,6 @@ class RunstopMerge(object):
         before = rospy.Duration(10.0)
         after = rospy.Duration(10.0)
 
-        matching_types = set( ("UndervoltageLockoutEvent", "CircuitBreakerTrip", "OnlyMotorHaltedEvent", "MtraceSafetyLockout") )
         for current_event in events:
             if current_event.type == "RunStopEvent":
                 print "Runstop", current_event
@@ -29,7 +31,7 @@ class RunstopMerge(object):
                 (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
                 for event in events[start_index:stop_index]:
                     if (not event.hide):
-                        if event.type in matching_types:
+                        if event.type in self.matching_types:
                             event.hide = True
                             current_event.children.append(event)
 
@@ -75,6 +77,45 @@ class CircuitBreakerMerge(object):
         return results
 
 
+class MotorsHaltedMerge(object):
+    """ Merge Any Events Leading up to, or following Motor Halted"""
+    def __init__(self):
+        pass    
+
+    def process(self,events):
+        if len(events) == 0:
+            return []
+
+        new_events = []
+
+        index_cache = StartAndStopCache()
+        before = rospy.Duration(10.0)
+        after = rospy.Duration(10.0)
+
+        for current_event in events:
+            if (current_event.type == "MotorsHalted") and (not current_event.hide):
+                current_event.hide = True
+                new_event = DiagEvent('MotorsHaltedMerge', '<MERGE>', current_event.t, "")
+                start_time = current_event.t - before
+                stop_time  = current_event.t + after    
+                (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
+                for event in events[start_index:stop_index]:
+                    if not event.hide:
+                        if event.type == "MotorsHalted":
+                            break
+                        event.hide = True
+                        new_event.children.append(event)
+                subtypes = ', '.join(set( [c.type for c in new_event.children]))
+                new_event.name = subtypes
+                new_event.desc = "Motors Halted Merge : " + subtypes
+                new_events.append(new_event)
+                
+        results = new_events
+        for event in events:
+            if not event.hide:
+                results.append(event)
+        return results
+
 
 class UndervoltageMerge(object):
     """ Merge Undervoltage events for different devices into one """
@@ -104,6 +145,7 @@ class UndervoltageMerge(object):
                         event.hide = True
                         new_event.children.append(event)
                 new_event.desc = "Merge of %d devices" % uv_count
+                new_event.name = "%d devices" % uv_count
                 new_events.append(new_event)
                 #current_event.name = "%d devices" % uv_count
         
@@ -161,9 +203,9 @@ class IntervalMerge(object):
             results.append(interval.children[0])
         else:
             #put set of children types in interval description
-            subtypes = set( [c.type for c in interval.children ] )
-            interval.name = ', '.join(subtypes)
-            interval.desc = 'Interval : ' + ', '.join(subtypes)
+            subtypes = ', '.join(set( [c.type for c in interval.children ] ))
+            interval.name = subtypes
+            interval.desc = 'Interval : ' + subtypes
             results.append(interval)
         
     def process(self, events):
@@ -178,6 +220,7 @@ class IntervalMerge(object):
 
         IntervalMerge.finalizeInterval(results, interval)
         return results
+
 
 
 class EcatDeviceMerge(object):
@@ -329,7 +372,6 @@ def filterEcatMerge(events):
     filters.append( EcatMasterMerge() )
     return runFilters(filters,events)
 
-
 def filterMtrace(events):
     filters = []
     filters.append( KeepEventTypesRegEx(['.*Mtrace.*']) )
@@ -340,6 +382,16 @@ def filterMotorModel(events):
     filters = []
     filters.append( KeepEventTypesRegEx(['.*MtraceMotorModel.*']) )
     filters.append( IntervalMerge(2.0) )
+    return runFilters(filters,events)
+
+def filterMotorsHalted(events):
+    """ Only keeps MotorHalted events and any other event that occurs near them """
+    filters = []
+    filters.append( RemoveEventTypes(['Ignored']) )
+    filters.append( UndervoltageMerge() )
+    filters.append( RunstopMerge(no_motors_halted=True) )  #don't merge in motor's halted events
+    filters.append( MotorsHaltedMerge() )
+    filters.append( KeepEventTypes(['MotorsHalted', 'MotorsHaltedMerge']) )
     return runFilters(filters,events)
 
 
