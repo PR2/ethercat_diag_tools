@@ -42,7 +42,12 @@ import roslib
 roslib.load_manifest(PKG)
 
 from diagnostic_annotate.kv_convert import ConvertVar, KeyValueConvertList, VarStorage
-from diagnostic_annotate.diag_event import generic_event
+from diagnostic_annotate.diag_event import DiagEvent, generic_event
+
+def loop_overrun(name, t, new_overruns, old_overruns, last_overrun_cause):
+    """ Represents realtime loop timing overrun """
+    evt = DiagEvent('RealtimeLoopOverrun', name, t, "Realtime loop overran %d time(s) : %s" % ((new_overruns-old_overruns),last_overrun_cause))
+    return evt
 
 class RealtimeControlLoopDiag:
     """ Looks for issues occurring in 'Realtime Control Loop' """
@@ -55,6 +60,8 @@ class RealtimeControlLoopDiag:
 
         kvl = KeyValueConvertList()
         kvl.add('Control Loop Overruns', ConvertVar('control_loop_overruns', int, 0))
+        kvl.add('Last Control Loop Overrun Cause', ConvertVar('last_overrun_cause', str, 0))
+        kvl.add('Last Overrun Loop Time (us)', ConvertVar('last_overrun_time', float, 0.0))
         kvl.add('Max EtherCAT roundtrip (us)', ConvertVar('max_ethercat_roundtrip', float, 0.0))
         kvl.add('Max Controller Manager roundtrip (us)', ConvertVar('max_controller_manager_roundtrip', float, 0.0))
 
@@ -69,11 +76,15 @@ class RealtimeControlLoopDiag:
         old = self.old
         new = VarStorage()
         self.kvl.convert(msg, new)
+    
+        if (new.control_loop_overruns > old.control_loop_overruns):
+            # There are a lot of control loop overruns, only create events for ones that take a long time,
+            # or for multiple loop overruns in 1 second
+            if (abs(new.control_loop_overruns - old.control_loop_overruns) > 1) or (new.last_overrun_time > 2000.0):
+                event_list.append(loop_overrun(name, t, new.control_loop_overruns, old.control_loop_overruns, new.last_overrun_cause))
 
-        #There are too many control loop overruns, don't print this out for now
-        #if new.control_loop_overruns != old.control_loop_overruns:
-        #    event_list.append("%d new control_loop_overruns" % (new.control_loop_overruns - old.control_loop_overruns))
-            
+        # These are kind of useless diagnostics, since they only tell us when max roundtrip time increased, 
+        # not how often it was above a certain value
         if (new.max_ethercat_roundtrip > old.max_ethercat_roundtrip) and (new.max_ethercat_roundtrip > 1000):
             event_list.append(generic_event(name, t, "Max ethercat roundtrip %f" % (new.max_ethercat_roundtrip)))
 

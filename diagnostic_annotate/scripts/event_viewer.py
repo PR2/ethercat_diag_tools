@@ -52,7 +52,7 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
-from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication, filterLostLinks, filterMotorModel, filterEcatMerge, filterMotorsHalted, filterRecalibrate, filterCalibration, filterMotorHaltedNoFirst
+from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication, filterLostLinks, filterMotorModel, filterEcatMerge, filterMotorsHalted, filterRecalibrate, filterCalibration, filterMotorHaltedNoFirst, filterTiming
 
 from diagnostic_annotate.event_tools import sortEvents
 
@@ -215,6 +215,7 @@ class EventViewerFrame(wx.Frame):
         self.filters['motors halted (no first)'] = filterMotorHaltedNoFirst
         self.filters['recalibrate'] = filterRecalibrate
         self.filters['calibration'] = filterCalibration
+        self.filters['timing'] = filterTiming
         self.filter_combobox = wx.ComboBox(self, -1, choices=self.filters.keys(), style=(wx.CB_READONLY | wx.CB_DROPDOWN))
         self.Bind(wx.EVT_COMBOBOX, self.onFilterSelect)
 

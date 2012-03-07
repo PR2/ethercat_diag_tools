@@ -381,6 +381,13 @@ def filterEcatCommunication(events):
     filters.append( KeepEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'LostLink']) )
     return runFilters(filters,events)
 
+def filterTiming(events):
+    """ Filters out any timing releted events"""
+    filters = []
+    filters.append( KeepEventTypes(['EcatTimeOverrun', 'RealtimeLoopOverrun']) )
+    filters.append( IntervalMerge(2.0) )
+    return runFilters(filters,events)
+
 def filterEcatMerge(events):
     filters = []
     filters.append( KeepEventTypes(['RxError', 'DroppedPacket', 'LatePacket', 'LostLink']))

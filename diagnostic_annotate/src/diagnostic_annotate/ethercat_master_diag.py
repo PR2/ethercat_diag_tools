@@ -74,11 +74,16 @@ def late_packet_event(name, t, lates):
     return evt
     
 def other_eml_event(name, t, new_other_eml, old_other_eml):
-    """ Represents seeing packets from differnt EtherCAT master """
+    """ Represents seeing packets from different EtherCAT master """
     evt = DiagEvent('OtherEML',name, t, '%d packets from other EtherCAT Master' % (new_other_eml - old_other_eml))
     evt.data = {'new' : new_other_eml, 'old' : old_other_eml}
     return evt
 
+def ecat_time_overrun_event(name, t, cause, _time):
+    """ Represents EtherCAT hardware stage that takes too much time """
+    evt = DiagEvent('EcatTimeOverrun', name, t, "%s took too much time : %f us" % (cause, _time))
+    evt.data = {'time' : _time}
+    return evt
 
 class EtherCATMasterDiag:
     """ Looks for errors in EtherCAT Master """
@@ -95,8 +100,15 @@ class EtherCATMasterDiag:
         kvl.add('RX Late Packet', ConvertVar('late_packets', int, 0))
         kvl.add('RX Other EML', ConvertVar('other_eml', int, 0))
         kvl.add('Motors halted', ConvertVar('motors_halted', true_false_to_bool, False))
-        self.kvl = kvl
-                      
+
+        # look at max timing information and complain if something took too long
+        kvl.add('Roundtrip time 1 Sec Max (us)',    ConvertVar('max_ecat_rtt', float, None))
+        kvl.add('Pack command time 1 Sec Max (us)', ConvertVar('max_pack_time', float, None))
+        kvl.add('Unpack state time 1 Sec Max (us)', ConvertVar('max_unpack_time', float, None))
+        kvl.add('Publish time 1 Sec Max (us)',      ConvertVar('max_publish_time', float, None))
+
+        self.kvl = kvl                             
+
         self.old = VarStorage()
         kvl.set_defaults(self.old)
     
@@ -131,6 +143,19 @@ class EtherCATMasterDiag:
                         
         if new.motors_halted and not old.motors_halted:
             event_list.append(motors_halted(name, t, msg.message, self.first))
+
+        # if any part of timeing loop takes longer than 1-ms then it broke the realtime loop
+        # old diagnostics do not contain detailed timing information
+        if hasattr(new, 'max_ecat_rtt'):
+            if new.max_ecat_rtt > 2000.0: 
+                # this happens so much, only pickout stuff that is longer than 2ms
+                event_list.append(ecat_time_overrun_event(name, t, 'EtherCAT RTT', new.max_ecat_rtt))
+            if new.max_pack_time > 1000.0:
+                event_list.append(ecat_time_overrun_event(name, t, 'Pack', new.max_pack_time))
+            if new.max_unpack_time > 1000.0:
+                event_list.append(ecat_time_overrun_event(name, t, 'Unpack', new.max_unpack_time))
+            if new.max_publish_time > 1000.0:
+                event_list.append(ecat_time_overrun_event(name, t, 'Publish', new.max_publish_time))
 
         self.level = msg.level
         self.message = msg.message
