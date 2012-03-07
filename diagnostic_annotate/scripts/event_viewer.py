@@ -52,7 +52,8 @@ roslib.load_manifest(PKG)
 import rospy
 
 from diagnostic_annotate.diag_event import DiagEvent
-from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication, filterLostLinks, filterMotorModel, filterEcatMerge, filterMotorsHalted
+from diagnostic_annotate.merge_filters import filterPipeline1, filterPassThrough, filterBreakerTrips, filterMultiRunstop, filterOnlyIgnored, filterMtrace, filterEcatCommunication, filterLostLinks, filterMotorModel, filterEcatMerge, filterMotorsHalted, filterRecalibrate, filterCalibration, filterMotorHaltedNoFirst
+
 from diagnostic_annotate.event_tools import sortEvents
 
 import wx
@@ -171,6 +172,8 @@ class EventViewerFrame(wx.Frame):
     def __init__(self, input_filenames):
         wx.Frame.__init__(self, None, -1, "Event Viewer")
 
+        self.ref_time = None
+
         self.bag_events = []
         for filename in input_filenames:            
             try:
@@ -209,6 +212,9 @@ class EventViewerFrame(wx.Frame):
         self.filters['lost links'] = filterLostLinks
         self.filters['motor model'] = filterMotorModel
         self.filters['motors halted'] = filterMotorsHalted
+        self.filters['motors halted (no first)'] = filterMotorHaltedNoFirst
+        self.filters['recalibrate'] = filterRecalibrate
+        self.filters['calibration'] = filterCalibration
         self.filter_combobox = wx.ComboBox(self, -1, choices=self.filters.keys(), style=(wx.CB_READONLY | wx.CB_DROPDOWN))
         self.Bind(wx.EVT_COMBOBOX, self.onFilterSelect)
 
@@ -326,10 +332,8 @@ class EventViewerFrame(wx.Frame):
             displayErrorDialog(self, "No events")
 
         self.event_group_selection = None
-        if len(events) > 0:
-            self.ref_time = events[0].t
-        else:
-            self.ref_time = rospy.Time(0)
+        if self.ref_time == None:
+            self.ref_time = events[0].t if (len(events)>0) else rospy.Time(0)
         self.event_groups = [EventGroup(event,0) for event in events]        
         self.visible_event_groups = None
 

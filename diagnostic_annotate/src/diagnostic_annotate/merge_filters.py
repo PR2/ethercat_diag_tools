@@ -3,6 +3,7 @@ import roslib
 roslib.load_manifest(PKG)
 import rospy
 import re
+import copy
 
 from diagnostic_annotate.diag_event import DiagEvent
 from diagnostic_annotate.event_tools import StartAndStopCache, sortEvents
@@ -79,7 +80,8 @@ class CircuitBreakerMerge(object):
 
 class MotorsHaltedMerge(object):
     """ Merge Any Events Leading up to, or following Motor Halted"""
-    def __init__(self):
+    def __init__(self, ignore_first_event=False):
+        self.ignore_first_event = ignore_first_event
         pass    
 
     def process(self,events):
@@ -95,20 +97,22 @@ class MotorsHaltedMerge(object):
         for current_event in events:
             if (current_event.type == "MotorsHalted") and (not current_event.hide):
                 current_event.hide = True
-                new_event = DiagEvent('MotorsHaltedMerge', '<MERGE>', current_event.t, "")
-                start_time = current_event.t - before
-                stop_time  = current_event.t + after    
-                (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
-                for event in events[start_index:stop_index]:
-                    if not event.hide:
-                        if event.type == "MotorsHalted":
-                            break
-                        event.hide = True
-                        new_event.children.append(event)
-                subtypes = ', '.join(set( [c.type for c in new_event.children]))
-                new_event.name = subtypes
-                new_event.desc = "Motors Halted Merge : " + subtypes
-                new_events.append(new_event)
+                if ('first' not in current_event.data) or not current_event.data['first'] or not self.ignore_first_event:
+                    new_event = DiagEvent('MotorsHaltedMerge', '<MERGE>', current_event.t, "")
+                    new_event.data = copy.deepcopy(current_event.data)
+                    start_time = current_event.t - before
+                    stop_time  = current_event.t + after    
+                    (start_index,stop_index) = index_cache.getEventIndexRange(events, start_time, stop_time)
+                    for event in events[start_index:stop_index]:
+                        if not event.hide:
+                            if event.type == "MotorsHalted":
+                                break
+                            event.hide = True
+                            new_event.children.append(event)
+                    subtypes = ', '.join(set( [c.type for c in new_event.children]))
+                    new_event.name = subtypes
+                    new_event.desc = "Motors Halted Merge : " + subtypes
+                    new_events.append(new_event)
                 
         results = new_events
         for event in events:
@@ -346,6 +350,18 @@ def filterBreakerTrips(events):
     filters.append( KeepEventTypes(['CircuitBreakerTrip']) )
     return runFilters(filters,events)
 
+def filterRecalibrate(events):
+    """ Filter everything out except recalibrate events """
+    filters = []
+    filters.append( KeepEventTypes(['Recalibration']) )
+    return runFilters(filters,events)
+
+def filterCalibration(events):
+    """ Filter everything out except recalibrate events """
+    filters = []
+    filters.append( KeepEventTypes(['Recalibration','Calibrated']) )
+    return runFilters(filters,events)
+
 def filterMultiRunstop(events):
     """ Filters everthing out except multiple runstops events """
     filters = []
@@ -384,13 +400,20 @@ def filterMotorModel(events):
     filters.append( IntervalMerge(2.0) )
     return runFilters(filters,events)
 
+
 def filterMotorsHalted(events):
+    return _filterMotorsHalted(events, False)
+
+def filterMotorHaltedNoFirst(events):
+    return _filterMotorsHalted(events, True)
+
+def _filterMotorsHalted(events, ignore_first_event):
     """ Only keeps MotorHalted events and any other event that occurs near them """
     filters = []
     filters.append( RemoveEventTypes(['Ignored']) )
     filters.append( UndervoltageMerge() )
     filters.append( RunstopMerge(no_motors_halted=True) )  #don't merge in motor's halted events
-    filters.append( MotorsHaltedMerge() )
+    filters.append( MotorsHaltedMerge(ignore_first_event))
     filters.append( KeepEventTypes(['MotorsHalted', 'MotorsHaltedMerge']) )
     return runFilters(filters,events)
 

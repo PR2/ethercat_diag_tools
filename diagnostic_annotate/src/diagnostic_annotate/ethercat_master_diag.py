@@ -55,9 +55,11 @@ def only_motor_halted_event(name, t, desc):
     """ Represents error from master of just 'Motors Halted'."""
     return DiagEvent('OnlyMotorHaltedEvent',name, t, desc)
 
-def motors_halted(name, t, desc):
+def motors_halted(name, t, desc, first):
     """ Represents transition of EtherCAT Master motor halted value from false to true"""
-    return DiagEvent('MotorsHalted', name, t, "Motors halted : %s" % desc)
+    d = DiagEvent('MotorsHalted', name, t, "Motors halted : %s" % desc)
+    d.data = {'first':first}
+    return d
 
 def dropped_packet_event(name, t, drops):
     """ Represents dropped packet from EtherCAT Master """
@@ -86,6 +88,7 @@ class EtherCATMasterDiag:
 
         self.level = 0 
         self.message = "OK"
+        self.first = True
 
         kvl = KeyValueConvertList()
         kvl.add('Dropped Packets', ConvertVar('dropped_packets', int, 0))
@@ -127,11 +130,12 @@ class EtherCATMasterDiag:
                 event_list.append(other_eml_event(name, t, new.other_eml, new.other_eml, old.other_eml))
                         
         if new.motors_halted and not old.motors_halted:
-            event_list.append(motors_halted(name, t, msg.message))
+            event_list.append(motors_halted(name, t, msg.message, self.first))
 
         self.level = msg.level
         self.message = msg.message
 
         self.old = new
+        self.first = False
 
         return event_list

@@ -79,6 +79,18 @@ def device_reset_error(name, t):
     """ Represents "Device reset likely" event. """
     return DiagEvent('DeviceResetLikely', name, t, "Device reset likely")
 
+def calibration_event(name, t, offset):
+    """ Represents initial device calibration"""
+    d = DiagEvent('Calibrated', name, t, "%s calibrated at %f" % (name,offset))
+    d.data = {'offset':offset}
+    return d
+
+def recalibration_event(name, t, new_offset, old_offset):
+    """ Represents device recalibration (not initial calibration) """
+    d = DiagEvent('Recalibration', name, t, "%s recalibration from %f to %f" % (name,old_offset,new_offset))
+    d.data = {'new_offset':new_offset, 'old_offset':old_offset}
+    return d
+    
 
 def yes_no_to_bool(str):
     if (str == "Yes"):
@@ -197,6 +209,10 @@ class WGEtherCATDeviceDiag(EtherCATDeviceDiag):
         self.has_motor_model_error   = False
         self.has_motor_model_warning = False
 
+        if has_encoder:
+            self.calibration_offset = 0.0
+            kvl.add('Calibration Offset', ConvertVar('calibration_offset', float, 0.0))
+
         self.old = VarStorage()
         kvl.set_defaults(self.old)
 
@@ -235,6 +251,19 @@ class WGEtherCATDeviceDiag(EtherCATDeviceDiag):
                 event_list.append(undervoltage_lockout_event(name, t))
             else:
                 event_list.append(generic_event(name, t, "safety disable status changed to %s" % (new.safety_disable_status_hold.to_str())))
+
+        if self.has_encoder:
+            # only pick-up re-calibration events.  Device always calibrates once on startup. 
+            # also, where re-calibrating, the offset return to 0.0 when calbiration controllers are runnning
+            if new.calibration_offset != 0.0:            
+                if new.calibration_offset != self.calibration_offset:
+                    if self.calibration_offset == 0.0:
+                        event_list.append(calibration_event(name,t,new.calibration_offset))
+                    else:
+                        event_list.append(recalibration_event(name,t,new.calibration_offset,self.calibration_offset))
+                
+                self.calibration_offset = new.calibration_offset
+            
 
         self.old = new
         return event_list
