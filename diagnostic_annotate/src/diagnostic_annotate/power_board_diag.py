@@ -75,6 +75,12 @@ def circuit_breaker_trip(name, t, circuit_breaker_num, new_trip_count, old_trip_
     evt.data = {'circuit_breaker_num': circuit_breaker_num, 'old_trip_count' : old_trip_count, 'new_trip_count' : new_trip_count}
     return evt
 
+def fan_fail_event(name, t, speed):
+   """ Represents Base Fan speed too low """
+   desc = "Base Fan Failure (Speed %d)"%(speed)
+   evt = DiagEvent('BaseFanFail', name, t, desc)
+   evt.data = {'speed': speed}
+   return evt
 
 def str_to_bool(str):
     if (str == "True"):
@@ -102,6 +108,8 @@ class PowerBoardDiag:
         for i in range(3):
             kvl.add('CB%d Trip Count'%i, ConvertList('trip_count', int, i, 0))
 
+        kvl.add('Base Fan Speed', ConvertVar('base_fan_speed', int, 0))
+
         self.kvl = kvl
         self.old = VarStorage()
         kvl.set_defaults(self.old)
@@ -122,6 +130,9 @@ class PowerBoardDiag:
         for i in range(3):
             if new.trip_count[i] != old.trip_count[i]:
                 event_list.append(circuit_breaker_trip(name, t, i, new.trip_count[i], old.trip_count[i]))
+
+        if new.base_fan_speed < 500:
+            event_list.append(fan_fail_event(name, t, new.base_fan_speed))
 
         self.old = new
         self.level = msg.level

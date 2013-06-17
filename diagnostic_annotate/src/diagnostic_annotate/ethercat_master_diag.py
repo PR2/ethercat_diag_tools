@@ -139,7 +139,7 @@ class EtherCATMasterDiag:
         # limit rate of this event, since if another EtherCAT master is running, this value while be constantly increasing 
         if new.other_eml != old.other_eml:
             if (old.other_eml == 0) or ((new.other_eml - old.other_eml) > 10000):
-                event_list.append(other_eml_event(name, t, new.other_eml, new.other_eml, old.other_eml))
+                event_list.append(other_eml_event(name, t, new.other_eml, old.other_eml))
                         
         if new.motors_halted and not old.motors_halted:
             event_list.append(motors_halted(name, t, msg.message, self.first))
