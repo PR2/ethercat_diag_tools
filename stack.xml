@@ -1,6 +1,6 @@
 <stack>
   <description brief="ethercat_diag_tools">ethercat_diag_tools</description>
-  <author>Maintained by Kevin Watts</author>
+  <author>Maintained by Kevin Watts, Maintainer=Devon Ash</author>
   <license>BSD</license>  
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/ethercat_diag_tools</url>
