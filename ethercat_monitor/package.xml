@@ -1,0 +1,36 @@
+<package>
+  <name>ethercat_monitor</name>
+  <version>1.0.0</version>
+  <description>Monitors etherCAT chains for packet drops, allows users to localize a dropped packet or link.</description>
+  <maintainer email="dash@clearpathrobotics.com">Devon Ash</maintainer>
+  <license>BSD</license>
+
+  <url type="website">http://ros.org/wiki/ethercat_monitor</url>
+  <!-- <url type="bugtracker"></url> -->
+
+  <author>Derek King</author>
+  <author>dking@willowgarage.com</author>
+
+  <!-- Dependencies which this package needs to build itself. -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Dependencies needed to compile this package. -->
+  <build_depend>rospy</build_depend>
+  <build_depend>rosbag</build_depend>
+  <build_depend>diagnostic_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+
+  <!-- Dependencies needed after this package is compiled. -->
+  <run_depend>rospy</run_depend>
+  <run_depend>rosbag</run_depend>
+  <run_depend>diagnostic_msgs</run_depend>
+  <run_depend>std_msgs</run_depend>
+
+  <!-- Dependencies needed only for running tests. -->
+  <!-- <test_depend>rospy</test_depend> -->
+  <!-- <test_depend>rosbag</test_depend> -->
+  <!-- <test_depend>diagnostic_msgs</test_depend> -->
+  <!-- <test_depend>std_msgs</test_depend> -->
+
+</package>
+
