@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(ethercat_monitor)
 # Load catkin and all dependencies required for this package
 # TODO: remove all from COMPONENTS that are not catkin packages.
-find_package(catkin REQUIRED COMPONENTS rospy rosbag diagnostic_msgs std_msgs)
+find_package(catkin REQUIRED COMPONENTS rospy rosbag diagnostic_msgs std_msgs message_generation)
 
 # include_directories(include ${Boost_INCLUDE_DIR} ${catkin_INCLUDE_DIRS})
 # CATKIN_MIGRATION: removed during catkin migration
@@ -33,7 +33,12 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #uncomment if you have defined messages
 add_message_files(
   FILES
-  # TODO: List your msg files here
+  EtherCATDevicePortStatus.msg
+  EtherCATDeviceStatus.msg
+  EtherCATMasterStatus.msg
+  EtherCATSystemStatus.msg
+  SavedBagHeader.msg
+  StatusNote.msg
 )
 
 #common commands for building c++ executables and libraries
@@ -43,14 +48,15 @@ add_message_files(
 # CATKIN_MIGRATION: removed during catkin migration
 # rosbuild_add_boost_directories()
 #find_package(Boost REQUIRED COMPONENTS thread)
-include_directories(${Boost_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
+#include_directories(${Boost_INCLUDE_DIRS})
+#target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
 #add_executable(example examples/example.cpp)
 #target_link_libraries(example ${PROJECT_NAME})
 ## Generate added messages and services with any dependencies listed here
-generate_messages(
-    #TODO DEPENDENCIES geometry_msgs std_msgs
-)
+#generate_messages(
+#    #TODO DEPENDENCIES geometry_msgs std_msgs
+#)
+generate_messages()
 
 # catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
 # TODO: fill in what other packages will need to use this package

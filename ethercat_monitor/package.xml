@@ -19,7 +19,8 @@
   <build_depend>rosbag</build_depend>
   <build_depend>diagnostic_msgs</build_depend>
   <build_depend>std_msgs</build_depend>
-
+  <build_depend>message_generation</build_depend>
+  <run_depend>message_runtime</run_depend>
   <!-- Dependencies needed after this package is compiled. -->
   <run_depend>rospy</run_depend>
   <run_depend>rosbag</run_depend>
