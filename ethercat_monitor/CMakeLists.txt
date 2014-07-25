@@ -26,9 +26,9 @@ find_package(catkin REQUIRED COMPONENTS rospy rosbag diagnostic_msgs std_msgs me
 # rosbuild_init()
 
 #set the default path for built executables to the "bin" directory
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+#set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
-set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+#set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #uncomment if you have defined messages
 add_message_files(
@@ -61,8 +61,8 @@ generate_messages()
 # catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
 # TODO: fill in what other packages will need to use this package
 catkin_package(
-    DEPENDS rospy rosbag diagnostic_msgs std_msgs
-    CATKIN_DEPENDS # TODO
+    DEPENDS
+    CATKIN_DEPENDS message_runtime # TODO
     INCLUDE_DIRS # TODO include
     LIBRARIES # TODO
 )
