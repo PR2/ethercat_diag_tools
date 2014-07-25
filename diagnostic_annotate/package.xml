@@ -17,6 +17,7 @@
   <!-- Dependencies needed to compile this package. -->
   <build_depend>rospy</build_depend>
   <build_depend>diagnostic_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
 
   <!-- Dependencies needed after this package is compiled. -->
   <run_depend>rospy</run_depend>

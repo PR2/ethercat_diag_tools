@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(diagnostic_annotate)
 find_package(catkin REQUIRED COMPONENTS rospy diagnostic_msgs message_generation)
-set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
-set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+#set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+#set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #common commands for building c++ executables and libraries
 #add_library(${PROJECT_NAME} src/example.cpp)
@@ -27,7 +27,7 @@ catkin_add_nosetests(test/test_bagutil.py)## Generate added messages and service
 # catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
 # TODO: fill in what other packages will need to use this package
 catkin_package(
-    DEPENDS rospy diagnostic_msgs
+    DEPENDS
     CATKIN_DEPENDS # TODO
     INCLUDE_DIRS # TODO include
     LIBRARIES # TODO
