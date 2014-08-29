@@ -33,3 +33,7 @@ catkin_package(
     LIBRARIES # TODO
 )
 
+install(DIRECTORY scripts/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  PATTERN ".svn" EXCLUDE)
+
