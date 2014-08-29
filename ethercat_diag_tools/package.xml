@@ -27,6 +27,9 @@
   <!-- <author email="jane.doe@example.com">Jane Doe</author> -->
 
 
+
+  <build_depend>diagnostic_annotate</build_depend>
+  <build_depend>ethercat_monitor</build_depend>
   <!-- The *_depend tags are used to specify dependencies -->
   <!-- Dependencies can be catkin packages or system dependencies -->
   <!-- Examples: -->
