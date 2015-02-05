@@ -76,7 +76,7 @@ install(DIRECTORY include/${PROJECT_NAME}/
   PATTERN ".svn" EXCLUDE
 )
 
-install(PROGRAMS scripts/ 
+install(PROGRAMS scripts/ethercat_convert.py scripts/ethercat_monitor.py
 DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
