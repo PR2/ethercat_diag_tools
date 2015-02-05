@@ -58,7 +58,7 @@ add_message_files(
 #)
 generate_messages()
 
-f# catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
+# catkin_package parameters: http://ros.org/doc/groovy/api/catkin/html/dev_guide/generated_cmake_api.html#catkin-package
 # TODO: fill in what other packages will need to use this package
 catkin_package(
     DEPENDS
@@ -76,7 +76,7 @@ install(DIRECTORY include/${PROJECT_NAME}/
   PATTERN ".svn" EXCLUDE
 )
 
-install(PROGRAMS scripts/ 
+catkin_install_python(PROGRAMS scripts/ 
 DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
